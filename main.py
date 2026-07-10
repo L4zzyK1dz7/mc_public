@@ -5,6 +5,8 @@ Streamlit UI frontend for the application.
 import streamlit as st
 import logging
 
+from src.ui.models import establish_session_state
+
 logging.basicConfig(
     level=logging.INFO, # Python defaults to warning
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
@@ -72,7 +74,6 @@ def main() -> None:
     establish_pages()
 
     # initialise session states
-    from src.ui.session_states import establish_session_state
     establish_session_state()
 
     # Sidebar for user inputs

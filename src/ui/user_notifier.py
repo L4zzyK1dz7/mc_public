@@ -9,4 +9,9 @@ def success(key: str, msg: str) -> None:
     st.session_state[key] = True
     st.toast(msg, icon="✅")
     logger.info("%s", msg)
-    
+
+def fail(key: str, msg: str) -> None:
+    """Store a failure flag in session state and show a transient toast."""
+    st.session_state[key] = False
+    st.toast(msg, icon="❌")
+    logger.error("%s", msg) 
