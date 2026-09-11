@@ -213,6 +213,8 @@ def create_platform() -> None:
                 st.session_state["platform_created"] = False
                 st.session_state["platform_draft"] = {}
                 st.session_state["sensor_draft_list"] = []
+                st.session_state["sensor_edit_index"] = 0
+
         except Exception as e:
             logger.exception("Error creating platform: %s", e)
             return

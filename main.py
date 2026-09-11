@@ -98,11 +98,11 @@ def main() -> None:
     Main route for the Streamlit application.
     """
 
-    # Setup pages
-    establish_pages()
-
     # initialise session states
     establish_session_state()
+
+    # Setup pages
+    establish_pages()
 
     # Sidebar for user inputs
     side_bar()

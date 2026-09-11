@@ -43,7 +43,7 @@ def establish_session_state() -> None:
         "number_of_sensors": 0,
         "sensor_draft_list": [],  # List of the saved sensors that are in its object form
         "sensor_draft_list_final": [],  # Current sensor draft
-        "sensor_edit_index": -1,
+        "sensor_edit_index": 0,
         "sensor_save_message": "",
     }
 

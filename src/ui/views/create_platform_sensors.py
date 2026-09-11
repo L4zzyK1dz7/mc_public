@@ -9,6 +9,7 @@ import pandas as pd
 import streamlit as st
 
 from src.schemas.sensor import SensorFactory
+from src.ui.user_notifier import success
 
 logger = logging.getLogger(__name__)
 
@@ -28,29 +29,6 @@ def _parse_sensor_csv(sensor_table: pd.DataFrame) -> Tuple[pd.DataFrame, Optiona
     return (
         pd.DataFrame(),
         "CSV must include x_values and pod columns, or at least two numeric columns.",
-    )
-
-
-def _is_single_sensor_complete(sensor_draft: dict) -> bool:
-    """
-    Validate a single sensor draft.
-    """
-    if not sensor_draft:
-        return False
-
-    display_name = bool(str(sensor_draft.get("display_name", "")).strip())
-    sensor_type = bool(sensor_draft.get("sensor_type"))
-    x_values = sensor_draft.get("x_values", [])
-    pod = sensor_draft.get("pod", [])
-
-    return (
-        display_name
-        and sensor_type
-        and isinstance(x_values, list)
-        and isinstance(pod, list)
-        and len(x_values) > 0
-        and len(x_values) == len(pod)
-        and all(0.0 <= float(value) <= 1.0 for value in pod)
     )
 
 
@@ -81,30 +59,6 @@ def _extract_valid_sensor_points(
     return x_values, pod_values, None
 
 
-def _sync_sensor_draft_list(sensor_count: int) -> list:
-    """
-    Resize sensor_draft_list to match the requested sensor count.
-    """
-    sensor_draft_list = st.session_state.get("sensor_draft_list", [])
-
-    if len(sensor_draft_list) < sensor_count:
-        sensor_draft_list.extend(
-            {
-                "display_name": f"Sensor {index + 1}",
-                "x_values": [],
-                "pod": [],
-                "sensor_type": "generic",
-                "source": "manual",
-            }
-            for index in range(len(sensor_draft_list), sensor_count)
-        )
-    elif len(sensor_draft_list) > sensor_count:
-        sensor_draft_list = sensor_draft_list[:sensor_count]
-
-    st.session_state.sensor_draft_list = sensor_draft_list
-    return sensor_draft_list
-
-
 def _build_sensor_summary(sensor_draft_list: list) -> pd.DataFrame:
     """
     Build summary table required by the UI acceptance criteria.
@@ -112,6 +66,9 @@ def _build_sensor_summary(sensor_draft_list: list) -> pd.DataFrame:
     args:
         sensor_draft_list (list): List of sensor drafts to build the summary table from, collection of Pydantic objects.
     """
+    if not sensor_draft_list:
+        return pd.DataFrame()
+
     rows = []
     sensor_draft_list = [sensor.model_dump() for sensor in sensor_draft_list]
     for index, draft in enumerate(sensor_draft_list):
@@ -123,9 +80,9 @@ def _build_sensor_summary(sensor_draft_list: list) -> pd.DataFrame:
                 "x_values": str(draft.get("x_values", [])),
                 "pod": str(draft.get("pod", [])),
                 "source": draft.get("source", "manual").capitalize(),
-                "status": "Ready"
-                if _is_single_sensor_complete(draft)
-                else "Incomplete",
+                "status": "Ready",
+                # if _is_single_sensor_complete(draft)
+                # else "Incomplete",
             }
         )
     return pd.DataFrame(rows)
@@ -148,13 +105,11 @@ def _save_sensor(
     # Create Sensor Config
     sensor_config = SensorFactory.create_sensor(**sensor_data_payload)
 
-    # print(sensor_config)
-    # st.session_state.sensor_draft_list.append(sensor_config)
-    st.session_state.sensor_draft_list_final.append(sensor_config)
-    print(st.session_state.sensor_draft_list)
+    st.session_state.sensor_draft_list.append(sensor_config)
 
-    # success(f"sensor_{index}_saved", f"Sensor {index + 1} saved.")
-    # logger.info(st.session_state.sensor_draft_list)
+    success(f"sensor_{index}_saved", f"Sensor {index + 1} saved.")
+    st.session_state.sensor_edit_index += 1
+    logger.info(st.session_state.sensor_draft_list)
     st.rerun()
 
 
@@ -259,7 +214,7 @@ def _render_import_editor(index: int, sensor_data_payload: dict) -> None:
         _save_sensor(index, sensor_data_payload)
 
 
-def _render_single_sensor_editor(index: int, sensor_draft: dict) -> None:
+def _render_single_sensor_editor(index: int) -> None:
     """
     Render one sensor editor entry.
 
@@ -274,40 +229,28 @@ def _render_single_sensor_editor(index: int, sensor_draft: dict) -> None:
     n_key = f"sensor_n_widget_{index}"
     table_editor_key = f"sensor_table_widget_{index}"
 
-    with st.expander(
-        f"Sensor {index + 1}", expanded=not _is_single_sensor_complete(sensor_draft)
-    ):
+    with st.expander(f"Sensor {index + 1}"):
         mode = st.radio(
             "Input Mode",
             options=["manual", "import"],
             key=mode_key,
             horizontal=True,
-            index=0 if sensor_draft.get("source", "manual") == "manual" else 1,
         )
 
         display_name = st.text_input(
             "Sensor Name",
             key=name_key,
-            value=sensor_draft.get("display_name", f"Sensor {index + 1}"),
+            value=f"Sensor {index + 1}",
         )
         sensor_type = st.selectbox(
             "Sensor Type",
             options=["generic", "specific"],
             key=type_key,
-            index=0 if sensor_draft.get("sensor_type", "generic") == "generic" else 1,
         )
 
         # K of N
-        k = st.text_input(
-            "K",
-            key=k_key,
-            value=sensor_draft.get("k", 3),
-        )
-        n = st.text_input(
-            "N",
-            key=n_key,
-            value=sensor_draft.get("n", 5),
-        )
+        k = st.text_input("K", key=k_key, value=3)
+        n = st.text_input("N", key=n_key, value=5)
 
         default_table = {
             "x_values": [0, 100, 200, 500, 1000],
@@ -324,27 +267,9 @@ def _render_single_sensor_editor(index: int, sensor_draft: dict) -> None:
         }
 
         if mode == "manual":
-            # _render_manual_editor(index, sensor_data_payload, table_editor_key)
             _render_manual_editor(index, sensor_data_payload, table_editor_key)
         else:
             _render_import_editor(index, sensor_data_payload)
-
-
-def is_sensor_draft_ready() -> bool:
-    """
-    Validate whether the sensor draft is complete and aligned for creation.
-    """
-    sensor_count = int(st.session_state.get("number_of_sensors", 0))
-    if sensor_count == 0:
-        return True
-
-    sensor_draft_list = st.session_state.get("sensor_draft_list", [])
-    if len(sensor_draft_list) != sensor_count:
-        return False
-
-    return all(
-        _is_single_sensor_complete(sensor_draft) for sensor_draft in sensor_draft_list
-    )
 
 
 def render_sensor_creation() -> bool:
@@ -358,18 +283,14 @@ def render_sensor_creation() -> bool:
         st.success(st.session_state["sensor_save_message"])
         st.session_state["sensor_save_message"] = ""
 
-    number_of_sensors = st.number_input(
-        "Number of sensors",
-        min_value=0,
-        value=int(st.session_state.get("number_of_sensors", 0)),
-        step=1,
-        key="number_of_sensors",
+    equip_sensor = st.radio(
+        "Equip Sensor?",
+        options=["Yes", "No"],
+        key="input_mode",
+        horizontal=True,
     )
 
-    sensor_count = int(number_of_sensors)
-    st.session_state.sensor_draft_list = _sync_sensor_draft_list(sensor_count)
-
-    if sensor_count == 0:
+    if equip_sensor == "No":
         st.info(
             "Platform will not be able to detect with no sensors. However, can continue and create the platform."
         )
@@ -377,14 +298,13 @@ def render_sensor_creation() -> bool:
 
     st.markdown("### Sensor Overview")
     st.dataframe(
-        _build_sensor_summary(st.session_state.sensor_draft_list_final),
+        _build_sensor_summary(st.session_state.sensor_draft_list),
         width="stretch",
         hide_index=True,
     )
 
-    print(st.session_state.sensor_draft_list)
     st.markdown("### Configure Sensors")
-    for index in range(sensor_count):
-        _render_single_sensor_editor(index, st.session_state.sensor_draft_list[index])
+    if equip_sensor == "Yes":
+        _render_single_sensor_editor(st.session_state.sensor_edit_index)
 
-    return is_sensor_draft_ready()
+    return True
