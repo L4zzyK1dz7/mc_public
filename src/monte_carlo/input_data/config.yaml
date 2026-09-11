@@ -1,0 +1,28 @@
+platforms:
+- display_name: Platform 1
+  movement_type:
+    type: random_walk
+  neutralised_platform_behaviour: stop
+  platform_config_folder: Platform 1
+  sensors: []
+  speed_mps: 0.0
+  team: Blue
+- display_name: Platform 2
+  movement_type:
+    type: random_walk
+  neutralised_platform_behaviour: stop
+  platform_config_folder: Platform 2
+  sensors: []
+  speed_mps: 0.0
+  team: Red
+simulation:
+  detection_end_condition: initial_detection
+  replications: 1000
+  seeds_file: false
+  time_limit_sec: 1.0
+  world_timestep_sec: 1.0
+world:
+  height: 100.0
+  length: 100.0
+  origin_x: 0.0
+  origin_y: 0.0

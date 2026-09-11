@@ -1,0 +1,40 @@
+simulation:
+  replications: 5
+  time_limit_sec: 3600.0
+  world_timestep_sec: 1.0
+  detection_end_condition: initial_detection # initial_detection or team_detection
+  seeds_file: true
+world:
+  origin_x: 0.0
+  origin_y: 0.0
+  length: 1000000.0
+  height: 800000.0
+
+# platforms:
+# - platform_config_folder: blue_1
+#   display_name: Agent_1
+#   team: Blue
+#   speed_mps: 2.7777777777777777
+#   neutralised_platform_behaviour: stop
+#   movement:
+#     pattern: barrier_patrol
+#     start_x_pos: 100.0
+#     start_y_pos: 100.0
+#     length: 500.0
+#     height: 200.0
+# - platform_config_folder: blue_2
+#   display_name: Agent_2
+#   team: Blue
+#   speed_mps: 2.7777777777777777
+#   neutralised_platform_behaviour: stop
+#   movement:
+#     pattern: intruder_search
+#     start_distance: 100.0
+#     end_condition: cross_world
+# - platform_config_folder: red_1
+#   display_name: Agent_3
+#   team: Red
+#   speed_mps: 2.7777777777777777
+#   neutralised_platform_behaviour: stop
+#   movement:
+#     pattern: random_walk
