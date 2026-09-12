@@ -7,11 +7,11 @@ platforms:
   sensors: []
   speed_mps: 0.0
   team: Blue
-- display_name: Platform 2
+- display_name: Platform 1
   movement_type:
     type: random_walk
   neutralised_platform_behaviour: stop
-  platform_config_folder: Platform 2
+  platform_config_folder: Platform 1
   sensors: []
   speed_mps: 0.0
   team: Red

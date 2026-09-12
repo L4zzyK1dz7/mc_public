@@ -81,8 +81,6 @@ def _build_sensor_summary(sensor_draft_list: list) -> pd.DataFrame:
                 "pod": str(draft.get("pod", [])),
                 "source": draft.get("source", "manual").capitalize(),
                 "status": "Ready",
-                # if _is_single_sensor_complete(draft)
-                # else "Incomplete",
             }
         )
     return pd.DataFrame(rows)
@@ -103,9 +101,18 @@ def _save_sensor(
         return
 
     # Create Sensor Config
-    sensor_config = SensorFactory.create_sensor(**sensor_data_payload)
+    sensor_config: tuple[Optional["SensorConfig"], list[str]] = (
+        SensorFactory.create_sensor(**sensor_data_payload)
+    )
 
-    st.session_state.sensor_draft_list.append(sensor_config)
+    if sensor_config[0] is None:
+        error_messages = sensor_config[1]
+        st.warning(
+            f"Sensor {index + 1}: Failed to create sensor configuration. Errors: {', '.join(error_messages)}"
+        )
+        return
+
+    st.session_state.sensor_draft_list.append(sensor_config[0])
 
     success(f"sensor_{index}_saved", f"Sensor {index + 1} saved.")
     st.session_state.sensor_edit_index += 1
@@ -249,8 +256,8 @@ def _render_single_sensor_editor(index: int) -> None:
         )
 
         # K of N
-        k = st.text_input("K", key=k_key, value=3)
-        n = st.text_input("N", key=n_key, value=5)
+        k = st.number_input("K", key=k_key, value=3, min_value=1)
+        n = st.number_input("N", key=n_key, value=5, min_value=1)
 
         default_table = {
             "x_values": [0, 100, 200, 500, 1000],
@@ -288,6 +295,7 @@ def render_sensor_creation() -> bool:
         options=["Yes", "No"],
         key="input_mode",
         horizontal=True,
+        index=1,
     )
 
     if equip_sensor == "No":

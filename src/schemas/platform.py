@@ -64,6 +64,7 @@ class PlatformConfig(BaseModel):
     movement_type: MovementType = Field(
         ...,
         description="The movement type of the platform, which can be one of several predefined movement configurations.",
+        discriminator="type",
     )
     neutralised_platform_behaviour: str = Field(
         default=neutralised_platform_behaviour_options,
@@ -73,3 +74,10 @@ class PlatformConfig(BaseModel):
         default_factory=list,
         description="A list of sensors associated with the platform. Can be empty if not specified.",
     )
+
+    def update_movement(self) -> None:
+        """
+        Update the movement type of the platform.
+
+        """
+        self.movement_type.execute()

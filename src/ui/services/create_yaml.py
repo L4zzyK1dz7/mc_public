@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -29,8 +30,18 @@ def create_config_yaml(cfg_data: ConfigData) -> dict:
         )
 
     # Define the path to save the YAML file
-    output_path = Path("src/monte_carlo/input_data/config.yaml")
+    output_path = Path("input_data/config.yaml")
     output_path.parent.mkdir(parents=True, exist_ok=True)  # Ensure the directory exists
+
+    # Clear contents of the output path
+    if output_path.exists():
+        if output_path.is_file():
+            output_path.unlink()  # Remove existing file if it exists
+        else:
+            shutil.rmtree(
+                output_path, ignore_errors=True
+            )  # Remove existing directory if it exists
+    logger.info("Cleared existing configuration at: %s", output_path)
 
     # Convert dataclass to dictionary
 
@@ -39,11 +50,6 @@ def create_config_yaml(cfg_data: ConfigData) -> dict:
     )  # Use model_dump to convert Pydantic model to dict
 
     logger.info("Configuration dictionary created: %s", cfg_dict)
-    # cfg_dict = {
-    #     "simulation": cfg_data.simulation.__dict__,
-    #     "world": cfg_data.world.__dict__,
-    #     "platforms": [asdict(platform) for platform in cfg_data.platforms],
-    # }
 
     # Write the dictionary to a YAML file
     with open(output_path, "w") as yaml_file:

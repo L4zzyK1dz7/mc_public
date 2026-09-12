@@ -1,4 +1,8 @@
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Optional
+
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
+from src.schemas.error_handling import human_readable_errors
 
 
 class SensorConfig(BaseModel):
@@ -22,8 +26,8 @@ class SensorConfig(BaseModel):
         default_factory=list, description="The pod values associated with the sensor."
     )
     sensor_type: str = Field(..., description="The type of the sensor.")
-    k: int = Field(..., description="An integer parameter associated with the sensor.")
-    n: int = Field(..., description="An integer parameter associated with the sensor.")
+    k: int = Field(gt=0, description="An integer parameter associated with the sensor.")
+    n: int = Field(gt=0, description="An integer parameter associated with the sensor.")
 
 
 class GenericSensorConfig(SensorConfig):
@@ -38,10 +42,16 @@ class GenericSensorConfig(SensorConfig):
 
     type: str = Field("generic")
     fov_start_angle: float = Field(
-        default=0.0, description="The starting angle of the field of view."
+        ge=0.0,
+        le=360.0,
+        default=0.0,
+        description="The starting angle of the field of view.",
     )
     fov_end_angle: float = Field(
-        default=360.0, description="The ending angle of the field of view."
+        ge=0.0,
+        le=360.0,
+        default=360.0,
+        description="The ending angle of the field of view.",
     )
 
 
@@ -63,12 +73,20 @@ class SensorFactory:
     }
 
     @classmethod
-    def create_sensor(cls, **kwargs) -> SensorConfig:
-        # sensor_class = cls._sensor_map.get(sensor_type)
+    def create_sensor(cls, **kwargs) -> tuple[Optional[SensorConfig], list[str]]:
+        """
+        Create a sensor configuration based on the provided keyword arguments.
+
+        Returns:
+            tuple[Optional[SensorConfig], list[str]]: A tuple containing the created sensor configuration (or None if creation failed) and a list of error messages (empty list if successful).
+        """
         sensor_type = kwargs.get("sensor_type", "")
         sensor_class = cls._sensor_map.get(sensor_type)
 
-        if not sensor_class:
-            raise ValueError(f"Unknown sensor type: {sensor_type}")
+        try:
+            return sensor_class(**kwargs), []
 
-        return sensor_class(**kwargs)
+        except ValidationError as e:
+            print(human_readable_errors(e))
+
+            return None, human_readable_errors(e)

@@ -32,6 +32,12 @@ class RandomWalkMovement(BaseModel):
         "random_walk",
     )
 
+    def execute(self) -> None:
+        """
+        Execute the random walk movement.
+        """
+        print("Random Walking....")
+
 
 class IntruderSearchMovement(BaseModel):
     """
@@ -53,6 +59,12 @@ class IntruderSearchMovement(BaseModel):
         description="The end condition for the intruder search.",
     )
 
+    def execute(self) -> None:
+        """
+        Execute the intruder search movement.
+        """
+        print("Intruder Searching....")
+
 
 class BarrierPatrollerMovement(BaseModel):
     """
@@ -73,6 +85,12 @@ class BarrierPatrollerMovement(BaseModel):
     length: float = Field(..., description="The length of the barrier to patrol.", ge=0)
     height: float = Field(..., description="The height of the barrier to patrol.", ge=0)
 
+    def execute(self) -> None:
+        """
+        Execute the barrier patroller movement.
+        """
+        print("Patrolling Barrier....")
+
 
 class UserDefinedWaypointsMovement(BaseModel):
     """
@@ -87,3 +105,9 @@ class UserDefinedWaypointsMovement(BaseModel):
         default_factory=list,
         description="A list of waypoints representing the user-defined path.",
     )
+
+    def execute(self) -> None:
+        """
+        Execute the user-defined waypoints movement.
+        """
+        print("Following User-Defined Waypoints....")
