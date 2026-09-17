@@ -1,7 +1,14 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
 from enum import Enum
+from typing import TYPE_CHECKING
 
+import numpy as np
 from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    from src.schemas.simulation import ConfigData
 
 
 @dataclass
@@ -38,6 +45,32 @@ class RandomWalkMovement(BaseModel):
         """
         print("Random Walking....")
 
+    def get_next_position(
+        self,
+        config_data: ConfigData,
+        random_gen: np.random.Generator,
+    ) -> Waypoint:
+        """
+        Get the next position for the random walk movement based on the current position.
+
+        Args:
+            current_pos (Waypoint): The current position of the platform.
+            config_data (ConfigData): The configuration data for the simulation based on user input. This provides information about the environment in which the platform is operating.
+
+        Returns:
+            Waypoint: The next position for the platform.
+        """
+
+        world = config_data.world
+
+        # Generate a random waypoint position bounded by the world dimensions randomly
+        next_pos = Waypoint(
+            x=random_gen.uniform(world.origin_x, world.origin_x + world.length),
+            y=random_gen.uniform(world.origin_y, world.origin_y + world.height),
+        )
+
+        return next_pos
+
 
 class IntruderSearchMovement(BaseModel):
     """
@@ -65,6 +98,15 @@ class IntruderSearchMovement(BaseModel):
         """
         print("Intruder Searching....")
 
+    def get_next_position(
+        self,
+        config_data: ConfigData,
+        random_gen: np.random.Generator,
+    ) -> Waypoint:
+        raise NotImplementedError(
+            "get_next_position method is not implemented for IntruderSearchMovement."
+        )
+
 
 class BarrierPatrollerMovement(BaseModel):
     """
@@ -91,6 +133,17 @@ class BarrierPatrollerMovement(BaseModel):
         """
         print("Patrolling Barrier....")
 
+        # Check if waypoint should be updated
+
+    def get_next_position(
+        self,
+        config_data: ConfigData,
+        random_gen: np.random.Generator,
+    ) -> Waypoint:
+        raise NotImplementedError(
+            "get_next_position method is not implemented for BarrierPatrollerMovement."
+        )
+
 
 class UserDefinedWaypointsMovement(BaseModel):
     """
@@ -111,3 +164,12 @@ class UserDefinedWaypointsMovement(BaseModel):
         Execute the user-defined waypoints movement.
         """
         print("Following User-Defined Waypoints....")
+
+    def get_next_position(
+        self,
+        config_data: ConfigData,
+        random_gen: np.random.Generator,
+    ) -> Waypoint:
+        raise NotImplementedError(
+            "get_next_position method is not implemented for UserDefinedWaypointsMovement."
+        )

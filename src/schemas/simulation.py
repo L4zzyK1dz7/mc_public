@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from src.schemas.platform import PlatformConfig
 
 
-class WorldConfig(BaseModel):
+class World(BaseModel):
     """
     Represents the configuration for the simulation world.
     """
@@ -38,7 +38,7 @@ class SimulationConfig(BaseModel):
     time_limit_sec: float = Field(
         ..., description="The time limit for the simulation in seconds."
     )
-    world_timestep_sec: float = Field(
+    timestep_sec: float = Field(
         ..., description="The time step for the simulation world in seconds."
     )
     seeds_file: bool = Field(
@@ -56,7 +56,24 @@ class ConfigData(BaseModel):
     """
 
     simulation: SimulationConfig
-    world: WorldConfig
+    world: World
     platforms: list[PlatformConfig] = Field(
         default_factory=list, description="List of PlatformConfig instances."
     )
+
+    @classmethod
+    def from_dict(cls, data: dict) -> ConfigData:
+        """
+        Create a ConfigData instance from a dictionary.
+
+        Args:
+            data: Dictionary containing the configuration data.
+
+        Returns:
+            ConfigData instance.
+        """
+        return cls(
+            simulation=SimulationConfig(**data.get("simulation", {})),
+            world=World(**data.get("world", {})),
+            platforms=[PlatformConfig(**p) for p in data.get("platforms", [])],
+        )

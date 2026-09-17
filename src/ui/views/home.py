@@ -3,6 +3,7 @@ Home for streamlit application
 """
 
 import logging
+from pathlib import Path
 
 import pandas as pd
 import streamlit as st
@@ -209,10 +210,11 @@ def main() -> None:
         else None,
     )
 
-    if run_simulation_clicked and ready_to_run_simulation and create_yaml_button:
+    if run_simulation_clicked and ready_to_run_simulation:
         try:
-            logger.info("Running simulation...")
-            run_simulation()
+            logger.info("Starting Monte Carlo simulation...")
+            config_path = Path("input_data/config.yaml")
+            run_simulation(config_path)
             st.success("Monte Carlo simulation completed successfully!")
         except Exception as e:
             logger.exception("Error running simulation: %s", e)
