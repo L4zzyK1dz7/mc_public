@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 
-from src.monte_carlo.detection_pipeline.generic_pipeline import detect
+from src.monte_carlo.detection_pipeline.pipeline import detect
 from src.monte_carlo.end_conditions import EndCondition, check_end_conditions
 from src.monte_carlo.load_configuration import load_config_from_yaml, load_seeds
 from src.monte_carlo.output.aggregate_results import aggregate_and_output_results
@@ -85,6 +85,7 @@ def _execute_single_replication(
         for platform in waypoint_platforms:
             outcome_manager.record_waypoint_generated(platform, sim_time_sec)
 
+        # Perform detection based on the current platform states.
         detection = detect(
             platform_states=platform_states,
             current_time_sec=sim_time_sec,

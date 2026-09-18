@@ -19,13 +19,16 @@ class SensorConfig(BaseModel):
     """
 
     display_name: str = Field(..., description="The display name of the sensor.")
+    interval_time_sec: float = Field(
+        ..., description="The interval time of the sensor in seconds."
+    )
     x_values: list[float] = Field(
         default_factory=list, description="The x-values associated with the sensor."
     )
     pod: list[float] = Field(
         default_factory=list, description="The pod values associated with the sensor."
     )
-    sensor_type: str = Field(..., description="The type of the sensor.")
+    type: str = Field(..., description="The type of the sensor.")
     k: int = Field(gt=0, description="An integer parameter associated with the sensor.")
     n: int = Field(gt=0, description="An integer parameter associated with the sensor.")
 

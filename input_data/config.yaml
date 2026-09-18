@@ -4,25 +4,59 @@ platforms:
     type: random_walk
   neutralised_platform_behaviour: stop
   platform_config_folder: Platform 1
-  sensors: []
-  speed_mps: 5.0
+  sensors:
+  - display_name: Sensor 1
+    interval_time_sec: 1.0
+    k: 3
+    n: 5
+    pod:
+    - 1.0
+    - 0.8
+    - 0.6
+    - 0.4
+    - 0.2
+    type: generic
+    x_values:
+    - 0.0
+    - 100.0
+    - 200.0
+    - 500.0
+    - 1000.0
+  speed_mps: 0.0
   team: Blue
-- display_name: Platform 1
+- display_name: Platform 2
   movement_type:
     type: random_walk
   neutralised_platform_behaviour: stop
-  platform_config_folder: Platform 1
-  sensors: []
-  speed_mps: 10.0
+  platform_config_folder: Platform 2
+  sensors:
+  - display_name: Sensor 2
+    interval_time_sec: 1.0
+    k: 3
+    n: 5
+    pod:
+    - 1.0
+    - 0.8
+    - 0.6
+    - 0.4
+    - 0.2
+    type: generic
+    x_values:
+    - 0.0
+    - 100.0
+    - 200.0
+    - 500.0
+    - 1000.0
+  speed_mps: 0.0
   team: Red
 simulation:
   detection_end_condition: initial_detection
-  replications: 3
-  seeds_file: false
-  time_limit_sec: 1000.0
+  replications: 1000
+  seeds_file: true
+  time_limit_sec: 1.0
   timestep_sec: 1.0
 world:
-  height: 1000.0
-  length: 1000.0
+  height: 100.0
+  length: 100.0
   origin_x: 0.0
   origin_y: 0.0

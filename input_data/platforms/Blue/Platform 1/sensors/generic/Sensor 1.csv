@@ -1,0 +1,12 @@
+# display_name: Sensor 1
+# interval_time_sec: 1.0
+# type: generic
+# k: 3
+# n: 5
+
+range_m,pod
+0.0,1.0
+100.0,0.8
+200.0,0.6
+500.0,0.4
+1000.0,0.2

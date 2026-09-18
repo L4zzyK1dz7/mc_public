@@ -80,7 +80,7 @@ def side_bar() -> None:
         index=0,
         help="Initial Detection: Stop when the first detection occurs. Team Detection: Stop when the team achieves detection.",
     )
-    st.session_state.seeds_file = st.sidebar.checkbox("Use Seeds File", value=False)
+    st.session_state.seeds_file = st.sidebar.checkbox("Use Seeds File", value=True)
 
 
 def run_simulation() -> None:

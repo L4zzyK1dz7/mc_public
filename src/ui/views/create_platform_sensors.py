@@ -2,14 +2,19 @@
 Sensor section rendering and validation for platform creation.
 """
 
+from __future__ import annotations
+
 import logging
-from typing import Optional, Tuple
+from typing import TYPE_CHECKING, Any, Optional, Tuple
 
 import pandas as pd
 import streamlit as st
 
 from src.schemas.sensor import SensorFactory
 from src.ui.user_notifier import success
+
+if TYPE_CHECKING:
+    from src.schemas.sensor import SensorConfig
 
 logger = logging.getLogger(__name__)
 
@@ -59,27 +64,29 @@ def _extract_valid_sensor_points(
     return x_values, pod_values, None
 
 
-def _build_sensor_summary(sensor_draft_list: list) -> pd.DataFrame:
+def _build_sensor_summary(sensor_draft_list: list[SensorConfig]) -> pd.DataFrame:
     """
     Build summary table required by the UI acceptance criteria.
 
     args:
-        sensor_draft_list (list): List of sensor drafts to build the summary table from, collection of Pydantic objects.
+        sensor_draft_list (list[SensorConfig]): List of sensor drafts to build the summary table from, collection of Pydantic objects.
     """
     if not sensor_draft_list:
         return pd.DataFrame()
 
     rows = []
-    sensor_draft_list = [sensor.model_dump() for sensor in sensor_draft_list]
+    sensor_draft_list: list[dict[str, Any]] = [
+        sensor.model_dump() for sensor in sensor_draft_list
+    ]
     for index, draft in enumerate(sensor_draft_list):
         rows.append(
             {
                 "index": index + 1,
                 "name": draft.get("display_name", ""),
+                "interval_time_sec": draft.get("interval_time_sec", 1.0),
                 "type": draft.get("sensor_type", "").capitalize(),
-                "x_values": str(draft.get("x_values", [])),
-                "pod": str(draft.get("pod", [])),
-                "source": draft.get("source", "manual").capitalize(),
+                "x_values": draft.get("x_values", []),
+                "pod": draft.get("pod", []),
                 "status": "Ready",
             }
         )
@@ -101,7 +108,7 @@ def _save_sensor(
         return
 
     # Create Sensor Config
-    sensor_config: tuple[Optional["SensorConfig"], list[str]] = (
+    sensor_config: tuple[Optional[SensorConfig], list[str]] = (
         SensorFactory.create_sensor(**sensor_data_payload)
     )
 
@@ -254,6 +261,12 @@ def _render_single_sensor_editor(index: int) -> None:
             options=["generic", "specific"],
             key=type_key,
         )
+        interval_time_sec = st.number_input(
+            "Interval Time (sec)",
+            key=f"sensor_interval_time_widget_{index}",
+            value=1.0,
+            min_value=0.0,
+        )
 
         # K of N
         k = st.number_input("K", key=k_key, value=3, min_value=1)
@@ -267,6 +280,7 @@ def _render_single_sensor_editor(index: int) -> None:
         sensor_data_payload: dict = {
             "display_name": display_name,
             "sensor_type": sensor_type,
+            "interval_time_sec": interval_time_sec,
             "x_values": default_table["x_values"],
             "pod": default_table["pod"],
             "k": k,

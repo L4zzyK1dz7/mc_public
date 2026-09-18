@@ -10,7 +10,7 @@ import streamlit as st
 
 from src.monte_carlo.monte_carlo import run_simulation
 from src.schemas.platform import Team
-from src.schemas.simulation import ConfigData, SimulationConfig, WorldConfig
+from src.schemas.simulation import ConfigData, SimulationConfig, World
 from src.ui.services.create_yaml import create_config_yaml
 from src.ui.user_notifier import success
 
@@ -156,11 +156,11 @@ def create_cfg_data() -> None:
             simulation=SimulationConfig(
                 replications=st.session_state.number_of_replications,
                 time_limit_sec=st.session_state.time_limit_sec,
-                world_timestep_sec=st.session_state.world_timestep_sec,
+                timestep_sec=st.session_state.world_timestep_sec,
                 detection_end_condition=st.session_state.detection_end_condition,
                 seeds_file=st.session_state.seeds_file,
             ),
-            world=WorldConfig(
+            world=World(
                 origin_x=st.session_state.origin_x,
                 origin_y=st.session_state.origin_y,
                 length=st.session_state.length,
