@@ -76,7 +76,7 @@ def create_sensor_file(
 def organise_input_data_directory(
     config_data: ConfigData,
     input_data_path: Path = Path("input_data"),
-) -> None:
+) -> list[PlatformConfig]:
     """
     Organise the input data directory. Platforms will have their own dedicated directories split between team colour
 
@@ -112,18 +112,19 @@ def organise_input_data_directory(
         platform_path = team_path / platform.display_name
         platform_path.mkdir(parents=True, exist_ok=True)
 
-        (platform_path / "sensors" / "generic").mkdir(parents=True, exist_ok=True)
-        (platform_path / "sensors" / "specific").mkdir(parents=True, exist_ok=True)
+        # Create folders derived by the sensor types
+        for sensor in platform.sensors:
+            (platform_path / "sensors" / sensor.type).mkdir(parents=True, exist_ok=True)
         (platform_path / "user_defined_movements").mkdir(parents=True, exist_ok=True)
 
         # If the platform has a sensor add the sensor files to the appropriate directories
         sensors: list[SensorConfig] = platform.sensors
         if sensors:
             for sensor in sensors:
-                sensor_type = sensor.type  # 'generic' or 'specific'
-
                 # Create and populate sensor file
                 create_sensor_file(sensor, platform_path)
+
+    return platforms
 
 
 def generate_seeds_file() -> None:
@@ -139,7 +140,9 @@ def generate_seeds_file() -> None:
             f.write(f"{random.randint(0, 1000000)}\n")
 
 
-def create_config_yaml(config_data: ConfigData) -> dict:
+def create_config_yaml(
+    config_data: ConfigData, input_data_path: Path = Path("input_data")
+) -> dict:
     """
     Create YAML file from CFG data. Also generate seeds.txt file if seeds_file is False
 
@@ -155,25 +158,23 @@ def create_config_yaml(config_data: ConfigData) -> dict:
         )
 
     # Define the path to save the YAML file
-    output_path = Path("input_data/config.yaml")
-    output_path.parent.mkdir(parents=True, exist_ok=True)  # Ensure the directory exists
+    output_path = input_data_path / "config.yaml"
 
-    # Clear contents of the output path
-    if output_path.exists():
-        if output_path.is_file():
-            output_path.unlink()  # Remove existing file if it exists
-        else:
-            shutil.rmtree(
-                output_path, ignore_errors=True
-            )  # Remove existing directory if it exists
-    logger.info("Cleared existing configuration at: %s", output_path)
+    # Clear the entire input_data directory so it can be regenerated from scratch
+    if input_data_path.exists():
+        shutil.rmtree(input_data_path, ignore_errors=True)
+    input_data_path.mkdir(parents=True, exist_ok=True)
+    logger.info("Cleared existing configuration at: %s", input_data_path)
 
     # Generate seeds.txt file if seeds_file is False
     if not config_data.simulation.seeds_file:
         generate_seeds_file()
 
     # Organise input data directory
-    organise_input_data_directory(config_data)
+    config_data.platforms = organise_input_data_directory(config_data)
+    logger.info(
+        "Organised input data directory. Platforms updated. %s", config_data.platforms
+    )
 
     # Convert dataclass to dictionary
     cfg_dict = config_data.model_dump(
@@ -181,6 +182,12 @@ def create_config_yaml(config_data: ConfigData) -> dict:
     )  # Use model_dump to convert Pydantic model to dict
 
     logger.info("Configuration dictionary created: %s", cfg_dict)
+
+    # remove sensor data but leave the sensor names as a list
+    for platform in cfg_dict.get("platforms", []):
+        if "sensors" in platform:
+            platform["sensors"] = [sensor["type"] for sensor in platform["sensors"]]
+            print(platform["sensors"])
 
     # Write the dictionary to a YAML file
     with open(output_path, "w") as yaml_file:
