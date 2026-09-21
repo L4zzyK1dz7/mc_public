@@ -6,7 +6,7 @@ platforms:
   platform_config_folder: Platform 1
   sensors:
   - generic
-  speed_mps: 0.0
+  speed_mps: 10.0
   team: Blue
 - display_name: Platform 1
   movement_type:
@@ -14,16 +14,16 @@ platforms:
   neutralised_platform_behaviour: stop
   platform_config_folder: Platform 1
   sensors: []
-  speed_mps: 0.0
+  speed_mps: 5.0
   team: Red
 simulation:
   detection_end_condition: initial_detection
-  replications: 5
-  seeds_file: false
-  time_limit_sec: 1000.0
+  replications: 200
+  seeds_file: true
+  time_limit_sec: 36000.0
   timestep_sec: 1.0
 world:
-  height: 100.0
-  length: 100.0
+  height: 100000.0
+  length: 100000.0
   origin_x: 0.0
   origin_y: 0.0

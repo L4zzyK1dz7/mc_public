@@ -113,7 +113,6 @@ def _execute_single_replication(
             current_time_sec=sim_time_sec,
             random_gen=random_gen,
         )
-        print(detections)
 
         for detection in detections:
             detected_target_ids.add(detection.target_platform_id)

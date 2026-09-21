@@ -43,7 +43,7 @@ CSV_COLUMN_ORDER: dict[str, pd.Series] = {
     "target_platform_id": pd.Series(dtype="int64"),
     "detection_made": pd.Series(dtype="bool"),
     "detection_sensor_name": pd.Series(dtype="string"),
-    "detection_distance_m": pd.Series(dtype="float64"),
+    "detection_distance_km": pd.Series(dtype="float64"),
 }
 
 
@@ -80,5 +80,6 @@ def build_positions_df(
     df["waypoint_y_km"] = (df["waypoint_y"] / 1000.0).round(2)
     df["speed_kmh"] = df["speed"] * 3.6
     df["timestamp_minutes"] = df["timestamp"] / 60.0
+    df["detection_distance_km"] = (df["detection_distance_m"] / 1000.0).round(2)
 
     return df[list(CSV_COLUMN_ORDER)]

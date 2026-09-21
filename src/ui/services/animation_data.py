@@ -36,7 +36,7 @@ REQUIRED_POSITION_COLUMNS = {
     "target_platform_id",
     "detection_made",
     "detection_sensor_name",
-    "detection_distance_m",
+    "detection_distance_km",
 }
 _STRING_COLUMNS = {"platform_id", "team", "target_platform_id", "detection_sensor_name"}
 
@@ -156,9 +156,9 @@ def build_platforms(
                         if pd.notna(row.detection_sensor_name)
                         else None
                     ),
-                    "detection_distance_m": (
-                        float(row.detection_distance_m)
-                        if pd.notna(row.detection_distance_m)
+                    "detection_distance_km": (
+                        float(row.detection_distance_km)
+                        if pd.notna(row.detection_distance_km)
                         else None
                     ),
                 }
@@ -169,7 +169,9 @@ def build_platforms(
                 "detecting_platform_id": str(platform_id),
                 "target_platform_id": record["target_platform_id"],
                 "sensor_name": record["detection_sensor_name"],
-                "distance_m": record["detection_distance_m"],
+                "distance_m": record["detection_distance_km"] * 1000.0
+                if record["detection_distance_km"] is not None
+                else None,
             }
             for record in records
             if record["detection_made"] and record["target_platform_id"]

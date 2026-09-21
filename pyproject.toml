@@ -20,9 +20,20 @@ dev = [
     "jupyterlab>=4.5.9",
     "pre-commit>=4.3.0",
     "pytest>=8.4.2",
+    "pytest-cov>=7.1.0",
     "ruff>=0.15.21",
     "ty>=0.0.58",
 ]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+addopts = "--cov=src/monte_carlo --cov=src/schemas --cov-report=term-missing --cov-fail-under=80"
+markers = [
+    "unit: fast, no I/O or external state",
+    "integration: exercises real files/end-to-end orchestration",
+]
+
+[tool.coverage.run]
+# ui/ is Streamlit glue (views, session state) - excluded from the coverage target,
+# not tested directly.
+omit = ["src/ui/*"]

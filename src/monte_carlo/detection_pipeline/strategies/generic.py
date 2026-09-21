@@ -76,24 +76,29 @@ class GenericSensorDetectionStrategy(SensorDetectionStrategy):
             )
             window = state.get_window(target.id, sensor.n)
 
-            # 2. Check target in FOV; a miss still consumes a slot in the sliding window
+            # 2. Check if target is within the sensor's maximum range; a miss still consumes a slot in the sliding window
+            if distance_m > max(sensor.x_values):
+                window.append(False)
+                continue
+
+            # 3. Check target in FOV; a miss still consumes a slot in the sliding window
             if not self._in_fov(
                 detecting_platform, target, platform_heading_deg, fov_start, fov_end
             ):
                 window.append(False)
                 continue
 
-            # 3. Get PoD value based on distance to the target
+            # 4. Get PoD value based on distance to the target
             pod = (
                 float(np.interp(distance_m, sensor.x_values, sensor.pod))
                 if sensor.x_values and sensor.pod
                 else 0.0
             )
 
-            # 4. Evaluate PoD against Rnd number and record result into sliding window
+            # 5. Evaluate PoD against Rnd number and record result into sliding window
             window.append(bool(random_gen.random() < pod))
 
-            # 5. Evaluate K-of-n
+            # 6. Evaluate K-of-n
             if sum(window) >= sensor.k:
                 detections.append(
                     DetectionEvent(

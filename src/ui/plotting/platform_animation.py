@@ -32,7 +32,7 @@ class PlatformPosition(TypedDict):
     detection_made: bool
     target_platform_id: Optional[str]
     detection_sensor_name: Optional[str]
-    detection_distance_m: Optional[float]
+    detection_distance_km: Optional[float]
 
 
 class DetectionEvent(TypedDict):

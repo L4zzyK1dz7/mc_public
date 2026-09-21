@@ -127,7 +127,7 @@ def organise_input_data_directory(
     return platforms
 
 
-def generate_seeds_file() -> None:
+def generate_seeds_file(replications: int) -> None:
     """
     Generate a seeds.txt file with random seeds.
     """
@@ -136,7 +136,7 @@ def generate_seeds_file() -> None:
     seeds_path = Path("input_data/seeds.txt")
     seeds_path.parent.mkdir(parents=True, exist_ok=True)
     with open(seeds_path, "w") as f:
-        for _ in range(10):  # Generate 10 random seeds
+        for _ in range(replications):  # Generate seeds based on replications
             f.write(f"{random.randint(0, 1000000)}\n")
 
 
@@ -166,15 +166,20 @@ def create_config_yaml(
     input_data_path.mkdir(parents=True, exist_ok=True)
     logger.info("Cleared existing configuration at: %s", input_data_path)
 
-    # Generate seeds.txt file if seeds_file is False
-    if not config_data.simulation.seeds_file:
-        generate_seeds_file()
+    generate_seeds_file(config_data.simulation.replications)
 
     # Organise input data directory
     config_data.platforms = organise_input_data_directory(config_data)
     logger.info(
         "Organised input data directory. Platforms updated. %s", config_data.platforms
     )
+
+    # Convert to SI units
+    config_data.simulation.time_limit_sec = float(
+        config_data.simulation.time_limit_sec * 60 * 60
+    )  # hours to seconds
+    config_data.world.height = float(config_data.world.height * 1000)  # km to meters
+    config_data.world.length = float(config_data.world.length * 1000)  # km to meters
 
     # Convert dataclass to dictionary
     cfg_dict = config_data.model_dump(
