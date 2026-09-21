@@ -32,8 +32,20 @@ class PlatformPositionEvent(TypedDict):
     detection_distance_m: Optional[float]
 
 
-class ReplicationSummary(TypedDict):
-    """"""
+class DetectionOutcomeEvent(TypedDict):
+    """Outcome of one (detecting_platform, sensor, target_platform) pair for one replication.
+
+    Unlike PlatformPositionEvent (sparse, event-driven), exactly one row exists
+    per pair per replication regardless of whether a detection occurred.
+    """
+
+    replication_id: int
+    detecting_platform_id: str
+    sensor_name: str
+    target_platform_id: str
+    detection_outcome: bool
+    detection_distance_m: Optional[float]
+    detection_timestamp_sec: Optional[float]
 
 
 class SimulationResult(TypedDict):
@@ -51,6 +63,7 @@ class SimulationResult(TypedDict):
         "red_team_detection",
     ]
     platform_position_events: list[PlatformPositionEvent]
+    detection_outcomes: list[DetectionOutcomeEvent]
 
 
 SimulationResults = list[dict[int, SimulationResult]]

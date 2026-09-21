@@ -8,7 +8,7 @@ sensor types can be added without modifying the orchestrator (Open/Closed Princi
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import numpy as np
@@ -29,9 +29,13 @@ class SensorDetectionStrategy(ABC):
         target_platforms: list[PlatformState],
         current_time_sec: float,
         random_gen: np.random.Generator,
-    ) -> Optional[DetectionEvent]:
+    ) -> list[DetectionEvent]:
         """
-        Evaluate whether `detecting_platform`'s `sensor` detects any of `target_platforms`.
+        Evaluate `detecting_platform`'s `sensor` against every target in `target_platforms`.
+
+        Every target must be evaluated exhaustively (no short-circuiting on the first
+        hit), so that simultaneous detections in the same timestep are never missed
+        and every target's k-of-n history is updated every timestep.
 
         Args:
             sensor: The sensor configuration being evaluated.
@@ -41,6 +45,6 @@ class SensorDetectionStrategy(ABC):
             random_gen: Random generator for stochastic PoD evaluation.
 
         Returns:
-            A DetectionEvent if a detection occurred this timestep, otherwise None.
+            A list of DetectionEvents (possibly empty) for this timestep.
         """
         raise NotImplementedError

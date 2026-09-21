@@ -42,6 +42,22 @@ class PlatformState:
     )  # Per-sensor evaluation history, keyed by id(sensor) e.g. id(sensor): SensorRuntimeState
 
 
+def assign_platform_ids(platforms: list[PlatformConfig]) -> list[str]:
+    """Deterministically assign runtime platform ids (Blue_1, Blue_2, Red_1, ...) in config order.
+
+    Extracted so anything outside the simulation (e.g. the animation loader, which
+    needs to match raw_positions.csv's platform_id values) can derive the exact
+    same ids without duplicating - and risking drifting from - this logic.
+    """
+    team_counters: dict[str, int] = {}
+    ids: list[str] = []
+    for platform in platforms:
+        team = str(getattr(platform.team, "value", platform.team))
+        team_counters[team] = team_counters.get(team, 0) + 1
+        ids.append(f"{team}_{team_counters[team]}")
+    return ids
+
+
 def initialise_platform_states(
     config_data: ConfigData,
     random_gen: np.random.Generator,
@@ -61,23 +77,13 @@ def initialise_platform_states(
     """
     # Determine all the platforms
     all_platforms: list[PlatformConfig] = config_data.platforms
+    platform_ids = assign_platform_ids(all_platforms)
 
     all_platform_states: list[
         PlatformState
     ] = []  # Initialize the list to store all platform states
-    blue_counter = 0
-    red_counter = 0
-    id: str = ""  # Initialize an empty string for the platform ID
 
-    for p in all_platforms:
-        if p.team == "Blue":
-            blue_counter += 1
-            id = f"Blue_{blue_counter}"
-
-        elif p.team == "Red":
-            red_counter += 1
-            id = f"Red_{red_counter}"
-
+    for id, p in zip(platform_ids, all_platforms):
         initial_pos: Waypoint = movement_manager.get_waypoint(
             p.movement_type, config_data, random_gen
         )

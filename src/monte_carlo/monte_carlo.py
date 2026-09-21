@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
@@ -23,6 +24,7 @@ from src.monte_carlo.end_conditions.facts import (
 )
 from src.monte_carlo.output.aggregate_results import aggregate_and_output_results
 from src.monte_carlo.output.file_utils import get_next_run_folder
+from src.monte_carlo.output.outcome_detection_manager import OutcomeDetectionManager
 from src.monte_carlo.output.outcome_position_manager import OutcomePositionManager
 from src.monte_carlo.states.movement_manager import MovementManager
 from src.monte_carlo.states.platform_states import initialise_platform_states
@@ -48,6 +50,7 @@ def _execute_single_replication(
     config_data: ConfigData,
     movement_manager: MovementManager,
     outcome_manager: OutcomePositionManager,
+    detection_manager: OutcomeDetectionManager,
     seed: Optional[int] = None,
 ) -> SimulationResult:
     """
@@ -57,6 +60,7 @@ def _execute_single_replication(
         config_data: ConfigData,
         movement_manager: MovementManager,
         outcome_manager: OutcomePositionManager,
+        detection_manager: OutcomeDetectionManager,
         seed: Optional seed for reproducibility.
 
     Returns:
@@ -71,8 +75,7 @@ def _execute_single_replication(
         config_data, random_gen, movement_manager
     )
     outcome_manager.record_initial_positions(platform_states)
-
-    # Initialise
+    detection_manager.seed_pairs(platform_states)
 
     # Calculate nummber of total timesteps
     movement_manager.current_simulation_time = 0.0
@@ -102,14 +105,17 @@ def _execute_single_replication(
         for platform in waypoint_platforms:
             outcome_manager.record_waypoint_generated(platform, sim_time_sec)
 
-        # Perform detection based on the current platform states.
-        detection: Optional[DetectionEvent] = detect(
+        # Perform detection based on the current platform states. Every platform/sensor/
+        # target combination is evaluated exhaustively, so this may report more than one
+        # detection in the same timestep.
+        detections: list[DetectionEvent] = detect(
             platform_states=platform_states,
             current_time_sec=sim_time_sec,
             random_gen=random_gen,
         )
+        print(detections)
 
-        if detection is not None:
+        for detection in detections:
             detected_target_ids.add(detection.target_platform_id)
             detecting_platform = next(
                 platform
@@ -123,6 +129,7 @@ def _execute_single_replication(
                 sensor_name=detection.sensor_name,
                 distance_m=detection.distance_m,
             )
+            detection_manager.record_detection(detection, sim_time_sec)
 
         # Group both teams; either team can be the target of a team detection.
         teams: dict[str, list] = platforms_by_team(platform_states)  # Blue and Red
@@ -148,14 +155,17 @@ def _execute_single_replication(
         )
 
         # Determine the EndCondition facts based on the current simulation state.
+        # Any one detection is a sufficient representative here - these facts only need
+        # to know *that* a detection happened this timestep, not every single sensor.
+        representative_detection = detections[0] if detections else None
         facts = EndConditionFacts(
             detection=(
-                detection
+                representative_detection
                 if config_data.simulation.detection_end_condition == "initial_detection"
                 else None
             ),
             team_detection=(
-                detection
+                representative_detection
                 if config_data.simulation.detection_end_condition == "team_detection"
                 else None
             ),
@@ -190,6 +200,7 @@ def _execute_single_replication(
         "result": end_condition.result,
         "end_condition": end_condition.condition,
         "platform_position_events": outcome_manager.events,
+        "detection_outcomes": detection_manager.rows,
     }
     logger.info("Simulation Result: %s", simulation_result.get("result"))
     return simulation_result
@@ -215,9 +226,10 @@ def _execute_monte_carlo(
         # Get seeds if available
         seed = seeds[replication_id] if seeds is not None else None
         outcome_manager = OutcomePositionManager(replication_id)
+        detection_manager = OutcomeDetectionManager(replication_id)
 
         replication_result = _execute_single_replication(
-            config_data, movement_manager, outcome_manager, seed
+            config_data, movement_manager, outcome_manager, detection_manager, seed
         )
         # Process the replication result as needed
         logger.info("Finished replication %d", replication_id)
@@ -260,22 +272,23 @@ def run_simulation(
     if config_data.simulation.seeds_file:
         seeds_path = config_path.parent / "seeds.txt"
         try:
-            seeds = load_seeds(
+            seeds: list[int] = load_seeds(
                 seeds_path, replications=config_data.simulation.replications
-            )
+            )["seeds"]
+            logger.info("Loaded %d seeds from %s", len(seeds), seeds_path)
         except Exception as e:
             logger.error(f"Failed to load seeds: {e}")
-        return 1
-
-    # If no seeds were loaded from a file, generate them now. This makes the run reproducible later by saving these generated seeds.
-    seed_generator = np.random.default_rng()
-    seeds: list[int] = seed_generator.integers(
-        low=0, high=2**32 - 1, size=config_data.simulation.replications
-    ).tolist()
-    logger.info(
-        "Generated %d new random seeds for this run.",
-        config_data.simulation.replications,
-    )
+            return 1
+    else:
+        # If no seeds were loaded from a file, generate them now. This makes the run reproducible later by saving these generated seeds.
+        seed_generator = np.random.default_rng()
+        seeds: list[int] = seed_generator.integers(
+            low=0, high=2**32 - 1, size=config_data.simulation.replications
+        ).tolist()
+        logger.info(
+            "Generated %d new random seeds for this run.",
+            config_data.simulation.replications,
+        )
 
     # Determine output directory if not already specified, to save seeds.
     if output_dir is None:
@@ -285,6 +298,14 @@ def run_simulation(
 
     # Always save the generated seeds for reproducibility
     run_output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Snapshot the entire input_data folder (config.yaml + sensor/movement CSVs) into the
+    # run folder, so it becomes fully self-contained - reanimating or re-inspecting an old
+    # run later is never affected by input_data/ having since changed.
+    shutil.copytree(
+        config_path.parent, run_output_dir / "input_data", dirs_exist_ok=True
+    )
+
     seeds_output_path = run_output_dir / "seeds.txt"
     with open(seeds_output_path, "w", encoding="utf-8") as f:
         for seed in seeds:

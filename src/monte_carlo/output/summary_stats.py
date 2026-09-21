@@ -2,8 +2,10 @@
 Summary statistics table generation for simulation results.
 
 This module provides functions to generate aggregate statistics tables from
-confirmed detection events and replication summaries. Used by
-SimulationResult to create the `summary_stats.csv` output file.
+the per-replication detection outcome log (one row per detecting_platform /
+sensor / target_platform combination, per replication - see
+`OutcomeDetectionManager`). Used by SimulationResult to create the
+`summary_stats.csv` output file.
 
 ARCHITECTURAL RULE: "Validate at the Boundary, Trust in the Core"
 This is a BOUNDARY LAYER component that transforms core simulation output
@@ -13,41 +15,105 @@ for reporting and analysis.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Optional
 
 import pandas as pd
 
 if TYPE_CHECKING:
-    from src.monte_carlo.monte_carlo import SimulationResults
+    from src.schemas.output import DetectionOutcomeEvent
 
 
-def generate_table_1(detection_events_log: list[dict[str, Any]] = None) -> pd.DataFrame:
-    """
-    Groups detections by (detecting_agent_id, target_agent_id) per replication
-    to compute per-replication count/distance/timestamp, then averages across
-    replications.
+def _build_detection_outcomes_df(
+    detection_outcomes: list[DetectionOutcomeEvent],
+) -> pd.DataFrame:
+    """Convert the raw detection outcome log into a DataFrame with boundary unit conversions."""
+    df = pd.DataFrame(detection_outcomes)
+    if df.empty:
+        return df
 
-    Args:
-        detection_events_log: List of detection event dictionaries.
-
-    Returns:
-        DataFrame with columns: detecting_agent_id, target_agent_id,
-        average_detections, average_detection_distance, average_detection_timestampgroups detection by d
-    """
-    df = pd.DataFrame(
-        {
-            "detecting_platform_id": pd.Series(dtype="str"),
-            "target_platform_id": pd.Series(dtype="str"),
-            "average_detections": pd.Series(dtype="float"),
-            "average_detection_distance_km": pd.Series(dtype="float"),
-            "average_detection_timestamp_minutes": pd.Series(dtype="float"),
-        }
-    )
-
+    # Unit conversions: metres -> kilometres, seconds -> minutes
+    df["detection_distance_km"] = df["detection_distance_m"] / 1000.0
+    df["detection_timestamp_minutes"] = df["detection_timestamp_sec"] / 60.0
     return df
 
 
-def generate_table_2(detection_events_log: list[dict[str, Any]] = None) -> pd.DataFrame:
+def _first_detection_per_group(df: pd.DataFrame, group_cols: list[str]) -> pd.DataFrame:
+    """Collapse multiple/simultaneous sensor detections within a group into one row.
+
+    All of a platform's sensors share the platform's position, so simultaneous
+    detections always report the same distance - picking one representative
+    detection (earliest timestamp, sensor_name breaks ties) keeps distance and
+    timestamp paired and prevents a platform being counted more than once per
+    replication (which would push a probability above 1.0).
+    """
+    detected = df[df["detection_outcome"]]
+    if detected.empty:
+        return detected
+
+    detected = detected.sort_values(["detection_timestamp_minutes", "sensor_name"])
+    return detected.groupby(group_cols, as_index=False).first()
+
+
+def generate_table_1(
+    detection_outcomes: Optional[list[DetectionOutcomeEvent]] = None,
+) -> pd.DataFrame:
+    """
+    Per (detecting_platform_id, target_platform_id), the probability the platform
+    detected the target at all in a replication (any of its sensors), averaged
+    across replications. Simultaneous/multiple sensor detections within the same
+    replication are collapsed into a single event first, so a platform is never
+    counted as detecting more than once per replication.
+
+    Args:
+        detection_outcomes: List of detection outcome rows (one per platform/sensor/target
+            combination per replication).
+
+    Returns:
+        DataFrame with columns: detecting_platform_id, target_platform_id,
+        average_detections, average_detection_distance_km, average_detection_timestamp_minutes
+    """
+    columns = [
+        "detecting_platform_id",
+        "target_platform_id",
+        "average_detections",
+        "average_detection_distance_km",
+        "average_detection_timestamp_minutes",
+    ]
+
+    df = _build_detection_outcomes_df(detection_outcomes or [])
+    if df.empty:
+        return pd.DataFrame({col: pd.Series(dtype="object") for col in columns})
+
+    group_cols = ["replication_id", "detecting_platform_id", "target_platform_id"]
+
+    # Every (replication, platform, target) combination that was seeded, whether or
+    # not it was ever detected - the denominator for the probability.
+    universe = df[group_cols].drop_duplicates()
+    representative = _first_detection_per_group(df, group_cols)
+
+    per_replication = universe.merge(representative, on=group_cols, how="left")
+    per_replication["detection_outcome"] = per_replication["detection_outcome"].fillna(
+        False
+    )
+
+    grouped = (
+        per_replication.groupby(["detecting_platform_id", "target_platform_id"])
+        .agg(
+            average_detections=("detection_outcome", "mean"),
+            average_detection_distance_km=("detection_distance_km", "mean"),
+            average_detection_timestamp_minutes=(
+                "detection_timestamp_minutes",
+                "mean",
+            ),
+        )
+        .reset_index()
+    )
+    return grouped[columns]
+
+
+def generate_table_2(
+    detection_outcomes: Optional[list[DetectionOutcomeEvent]] = None,
+) -> pd.DataFrame:
     """
     E.g.
         1 detecting platform and 2 target platforms:
@@ -60,64 +126,94 @@ def generate_table_2(detection_events_log: list[dict[str, Any]] = None) -> pd.Da
                 sensor_2: average detections, average detection distance, average detection timestamp
 
     """
-    df = pd.DataFrame(
-        {
-            "detecting_platform_id": pd.Series(dtype="str"),
-            "sensor_name": pd.Series(dtype="str"),
-            "target_platform_id": pd.Series(dtype="str"),
-            "average_sensor_detections": pd.Series(dtype="float"),
-            "average_detection_distance_km": pd.Series(dtype="float"),
-            "average_detection_timestamp_minutes": pd.Series(dtype="float"),
-        }
+    columns = [
+        "detecting_platform_id",
+        "sensor_name",
+        "target_platform_id",
+        "average_sensor_detections",
+        "average_detection_distance_km",
+        "average_detection_timestamp_minutes",
+    ]
+
+    df = _build_detection_outcomes_df(detection_outcomes or [])
+    if df.empty:
+        return pd.DataFrame({col: pd.Series(dtype="object") for col in columns})
+
+    grouped = (
+        df.groupby(["detecting_platform_id", "sensor_name", "target_platform_id"])
+        .agg(
+            average_sensor_detections=("detection_outcome", "mean"),
+            average_detection_distance_km=("detection_distance_km", "mean"),
+            average_detection_timestamp_minutes=(
+                "detection_timestamp_minutes",
+                "mean",
+            ),
+        )
+        .reset_index()
     )
+    return grouped[columns]
 
-    return df
 
+def generate_table_3(
+    detection_outcomes: Optional[list[DetectionOutcomeEvent]] = None,
+) -> pd.DataFrame:
+    """Generates a table summarizing the empirical probability of at least one detection
+    for each target platform.
 
-def generate_table_3(detection_events_log: list[dict[str, Any]] = None) -> pd.DataFrame:
-    """Generates a table summarizing the probability of at least one detection for each target platform.
-
-    Calculate P(None detects) = 1 - P(A detection)
-    P(One detects) = Product each platform P(None detects)
+    For each replication, a target counts as "detected" if ANY detecting platform/sensor
+    pair against it succeeded (multiple detecting platforms are treated as multiple
+    simultaneous trials within that one replication). That per-replication boolean is
+    then averaged across replications to give an empirical probability, without assuming
+    independence between sensors/platforms the way the analytic complement rule would.
 
     Args:
-        detection_events_log: List of detection event dictionaries.
+        detection_outcomes: List of detection outcome rows.
 
     Returns:
         DataFrame with columns: target_platform_id, probability_of_at_least_one_detection
     """
-    df = pd.DataFrame(
-        {
-            "target_platform_id": pd.Series(dtype="str"),
-            "probability_of_at_least_one_detection": pd.Series(dtype="float"),
-        }
-    )
+    columns = ["target_platform_id", "probability_of_at_least_one_detection"]
 
-    return df
+    df = _build_detection_outcomes_df(detection_outcomes or [])
+    if df.empty:
+        return pd.DataFrame({col: pd.Series(dtype="object") for col in columns})
+
+    any_detected_per_replication = df.groupby(["replication_id", "target_platform_id"])[
+        "detection_outcome"
+    ].any()
+    probability = (
+        any_detected_per_replication.groupby("target_platform_id")
+        .mean()
+        .reset_index(name="probability_of_at_least_one_detection")
+    )
+    return probability[columns]
 
 
 def generate_table_4(
-    detection_events_log: list[dict[str, Any]], simulation_results: SimulationResults
+    detection_outcomes: Optional[list[DetectionOutcomeEvent]] = None,
 ) -> pd.DataFrame:
-    """ """
-    df = pd.DataFrame(
-        {
-            "replication_id": pd.Series(dtype="int"),
-            "detecting_platform_id": pd.Series(dtype="str"),
-            "target_platform_id": pd.Series(dtype="str"),
-            "sensor_name": pd.Series(dtype="str"),
-            "detection_outcome": pd.Series(dtype="str"),  # True or False
-            "detection_distance_km": pd.Series(dtype="float"),
-            "detection_timestamp_minutes": pd.Series(dtype="float"),
-        }
-    )
+    """Per-replication detection outcome for every (detecting_platform, sensor,
+    target_platform) combination - the raw log the other tables are aggregated from.
+    """
+    columns = [
+        "replication_id",
+        "detecting_platform_id",
+        "target_platform_id",
+        "sensor_name",
+        "detection_outcome",
+        "detection_distance_km",
+        "detection_timestamp_minutes",
+    ]
 
-    return df
+    df = _build_detection_outcomes_df(detection_outcomes or [])
+    if df.empty:
+        return pd.DataFrame({col: pd.Series(dtype="object") for col in columns})
+
+    return df[columns]
 
 
 def write_summary_stats_csv(
-    detection_events_log: list[dict[str, Any]],
-    simulation_results: SimulationResults,
+    detection_outcomes: list[DetectionOutcomeEvent],
     output_path: Optional[Path] = None,
 ) -> Path:
 
@@ -125,10 +221,10 @@ def write_summary_stats_csv(
         output_path = Path("summary_stats.csv")
 
     # Generate all tables
-    table1 = generate_table_1(detection_events_log)
-    table2 = generate_table_2(detection_events_log)
-    table3 = generate_table_3(detection_events_log)
-    table4 = generate_table_4(detection_events_log, simulation_results)
+    table1 = generate_table_1(detection_outcomes)
+    table2 = generate_table_2(detection_outcomes)
+    table3 = generate_table_3(detection_outcomes)
+    table4 = generate_table_4(detection_outcomes)
 
     # Write to file with section headers
     with open(output_path, "w", newline="", encoding="utf-8") as f:

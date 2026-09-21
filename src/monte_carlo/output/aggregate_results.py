@@ -41,9 +41,15 @@ def aggregate_and_output_results(
     run_output_dir.mkdir(parents=True, exist_ok=True)
 
     # 1. Export summary statistics
+    detection_outcomes = [
+        outcome
+        for replication_result in simulation_results
+        for result in replication_result.values()
+        for outcome in result["detection_outcomes"]
+    ]
     summary_stats_path = run_output_dir / "summary_stats.csv"
     summary_stats_logged = write_summary_stats_csv(
-        [], simulation_results, summary_stats_path
+        detection_outcomes, summary_stats_path
     )
     logger.info("Summary statistics written to %s", summary_stats_logged)
 

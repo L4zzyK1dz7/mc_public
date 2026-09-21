@@ -10,7 +10,7 @@
 from __future__ import annotations
 
 import math
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -33,9 +33,13 @@ class GenericSensorDetectionStrategy(SensorDetectionStrategy):
         target_platforms: list[PlatformState],
         current_time_sec: float,
         random_gen: np.random.Generator,
-    ) -> Optional[DetectionEvent]:
+    ) -> list[DetectionEvent]:
         """
-        Perform detection for the given sensor on the detecting platform against the target platforms.
+        Perform detection for the given sensor on the detecting platform against every target.
+
+        Every target is evaluated exhaustively (no early return) so simultaneous
+        detections against multiple targets in the same timestep are all captured,
+        and every target's k-of-n sliding window is updated every timestep.
 
         Args:
             sensor: The sensor configuration.
@@ -45,7 +49,7 @@ class GenericSensorDetectionStrategy(SensorDetectionStrategy):
             random_gen: Random generator passed to detection strategies for stochastic evaluation.
 
         Returns:
-            Optional DetectionEvent if a detection occurred, otherwise None.
+            A list of DetectionEvents (possibly empty) for this timestep.
         """
 
         # State persists on the platform (keyed by sensor identity) so interval
@@ -56,12 +60,14 @@ class GenericSensorDetectionStrategy(SensorDetectionStrategy):
 
         # 1. Check sensor interval time against simulation time; exit early if not ready yet
         if current_time_sec < state.next_eval_time_sec:
-            return None
+            return []
         state.next_eval_time_sec = current_time_sec + sensor.interval_time_sec
 
         platform_heading_deg = self._heading_deg(detecting_platform)
         fov_start = getattr(sensor, "fov_start_angle", 0.0)
         fov_end = getattr(sensor, "fov_end_angle", 360.0)
+
+        detections: list[DetectionEvent] = []
 
         for target in target_platforms:
             distance_m = math.hypot(
@@ -89,14 +95,16 @@ class GenericSensorDetectionStrategy(SensorDetectionStrategy):
 
             # 5. Evaluate K-of-n
             if sum(window) >= sensor.k:
-                return DetectionEvent(
-                    detecting_platform_id=detecting_platform.id,
-                    target_platform_id=target.id,
-                    sensor_name=sensor.display_name,
-                    distance_m=distance_m,
+                detections.append(
+                    DetectionEvent(
+                        detecting_platform_id=detecting_platform.id,
+                        target_platform_id=target.id,
+                        sensor_name=sensor.display_name,
+                        distance_m=distance_m,
+                    )
                 )
 
-        return None
+        return detections
 
     @staticmethod
     def _heading_deg(platform: PlatformState) -> float:

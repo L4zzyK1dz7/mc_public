@@ -40,7 +40,13 @@ def establish_pages() -> None:
         title="Create Platforms",
     )
 
-    navigation = st.navigation([home_page, create_platforms_page])
+    results_page = st.Page(
+        page="src/ui/views/results.py",
+        default=False,
+        title="Results",
+    )
+
+    navigation = st.navigation([home_page, create_platforms_page, results_page])
 
     navigation.run()
 

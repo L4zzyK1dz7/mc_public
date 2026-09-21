@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Optional
 
 from src.monte_carlo.detection_pipeline.events import DetectionEvent
+from src.monte_carlo.detection_pipeline.pairs import iter_platform_sensors
 from src.monte_carlo.detection_pipeline.strategies import get_strategy
 
 if TYPE_CHECKING:
@@ -24,9 +25,13 @@ def detect(
     platform_states: list[PlatformState],
     current_time_sec: float,
     random_gen: np.random.Generator,
-) -> Optional[DetectionEvent]:
+) -> list[DetectionEvent]:
     """
     Detection pipeline orchestrator to determine the type of detection the platform will perform
+
+    Every platform/sensor/target combination is evaluated exhaustively each timestep
+    (no short-circuiting), so simultaneous detections by multiple sensors or against
+    multiple targets are all reported rather than only the first one found.
 
     args:
         platform_states: List of current platform states.
@@ -34,31 +39,24 @@ def detect(
         random_gen: Random generator passed to detection strategies for stochastic evaluation.
 
     Returns:
-            Optional DetectionEvent if a detection occurred, otherwise None.
+            A list of DetectionEvents (possibly empty) reported this timestep.
     """
 
-    for platform in platform_states:
-        if not platform.sensors:
-            continue  # No sensor fitted, nothing to evaluate for this platform
+    detections: list[DetectionEvent] = []
 
-        # Identify potential target platforms for the current platform
-        target_platforms = [p for p in platform_states if p.team != platform.team]
-        if not target_platforms:
-            continue
+    for platform, sensor, target_platforms in iter_platform_sensors(platform_states):
+        strategy: Optional[SensorDetectionStrategy] = get_strategy(sensor.type)
+        if strategy is None:
+            continue  # Sensor type has no detection strategy registered yet
 
-        for sensor in platform.sensors:
-            strategy: Optional[SensorDetectionStrategy] = get_strategy(sensor.type)
-            if strategy is None:
-                continue  # Sensor type has no detection strategy registered yet
-
-            detection = strategy.detect(
+        detections.extend(
+            strategy.detect(
                 sensor=sensor,
                 detecting_platform=platform,
                 target_platforms=target_platforms,
                 current_time_sec=current_time_sec,
                 random_gen=random_gen,
             )
-            if detection is not None:
-                return detection
+        )
 
-    return None
+    return detections

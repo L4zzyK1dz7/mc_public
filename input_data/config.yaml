@@ -18,7 +18,7 @@ platforms:
   team: Red
 simulation:
   detection_end_condition: initial_detection
-  replications: 2
+  replications: 5
   seeds_file: false
   time_limit_sec: 1000.0
   timestep_sec: 1.0
