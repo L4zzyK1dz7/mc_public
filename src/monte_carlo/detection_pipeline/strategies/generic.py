@@ -97,7 +97,7 @@ class GenericSensorDetectionStrategy(SensorDetectionStrategy):
 
             # 5. Evaluate PoD against Rnd number and record result into sliding window
             window.append(bool(random_gen.random() < pod))
-
+            print(window, distance_m, sensor.x_values, max(sensor.x_values))
             # 6. Evaluate K-of-n
             if sum(window) >= sensor.k:
                 detections.append(

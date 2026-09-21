@@ -96,6 +96,10 @@ def _position_at_time(
     return positions[-1]
 
 
+def _seconds_to_minutes(timestamp_sec: float) -> float:
+    return timestamp_sec / 60.0
+
+
 def _team_color(team: str) -> str:
     return {"blue": "#2563eb", "red": "#dc2626"}.get(team.lower(), "#475569")
 
@@ -294,7 +298,7 @@ def build_animation(
     detection_buttons = [
         {
             "label": (
-                f"Jump to detection ({event['timestamp_sec']:.0f} s): "
+                f"Jump to detection ({_seconds_to_minutes(event['timestamp_sec']):.2f} min): "
                 f"{event['detecting_platform_id']} -> "
                 f"{event['target_platform_id']}"
             ),
@@ -315,7 +319,7 @@ def build_animation(
     if detection_events:
         detection_note += " | ".join(
             (
-                f"{event['timestamp_sec']:.0f} s: "
+                f"{_seconds_to_minutes(event['timestamp_sec']):.2f} min: "
                 f"{event['detecting_platform_id']} -> "
                 f"{event['target_platform_id']}"
             )
@@ -367,11 +371,11 @@ def build_animation(
                     {
                         "method": "animate",
                         "args": [[str(float(timestamp))], {"mode": "immediate"}],
-                        "label": f"{timestamp:.1f}",
+                        "label": f"{_seconds_to_minutes(timestamp):.2f}",
                     }
                     for timestamp in frame_times
                 ],
-                "currentvalue": {"prefix": "Time (s): "},
+                "currentvalue": {"prefix": "Time (min): "},
             }
         ],
         legend={

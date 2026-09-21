@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Optional
 from src.schemas.output import PlatformPositionEvent, PositionEventType
 
 if TYPE_CHECKING:
+    from src.monte_carlo.detection_pipeline.events import DetectionEvent
     from src.monte_carlo.states.platform_states import PlatformState
 
 
@@ -69,6 +70,38 @@ class OutcomePositionManager:
             detection_sensor_name=sensor_name,
             detection_distance_m=distance_m,
         )
+
+    def record_detection_snapshot(
+        self,
+        platform_states: list[PlatformState],
+        detection: DetectionEvent,
+        timestamp: float,
+    ) -> None:
+        """Capture a full-platform snapshot at the instant a detection is reported.
+
+        The raw position history expects one row per platform per timestep, with the
+        detecting platform annotated with the detection metadata and the remaining
+        platforms left as non-detecting snapshots.
+        """
+
+        for platform in platform_states:
+            is_detecting_platform = platform.id == detection.detecting_platform_id
+            self._record_platform_event(
+                event_type="detection",
+                platform=platform,
+                timestamp=timestamp,
+                detecting_platform_id=(platform.id if is_detecting_platform else None),
+                target_platform_id=(
+                    detection.target_platform_id if is_detecting_platform else None
+                ),
+                detection_made=is_detecting_platform,
+                detection_sensor_name=(
+                    detection.sensor_name if is_detecting_platform else None
+                ),
+                detection_distance_m=(
+                    detection.distance_m if is_detecting_platform else None
+                ),
+            )
 
     def record_time_limit(
         self,

@@ -116,18 +116,12 @@ def _execute_single_replication(
 
         for detection in detections:
             detected_target_ids.add(detection.target_platform_id)
-            detecting_platform = next(
-                platform
-                for platform in platform_states
-                if platform.id == detection.detecting_platform_id
-            )
-            outcome_manager.record_detection(
-                platform=detecting_platform,
+            outcome_manager.record_detection_snapshot(
+                platform_states=platform_states,
+                detection=detection,
                 timestamp=sim_time_sec,
-                target_platform_id=detection.target_platform_id,
-                sensor_name=detection.sensor_name,
-                distance_m=detection.distance_m,
             )
+
             detection_manager.record_detection(detection, sim_time_sec)
 
         # Group both teams; either team can be the target of a team detection.

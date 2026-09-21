@@ -117,7 +117,7 @@ def load_seeds(seeds_path: Path, replications: int) -> dict:
         raise ValueError(f"Duplicate seed values found in {seeds_path}")
 
     # Check seeds equal to number of replications
-    if len(loaded_seeds) != replications:
+    if len(loaded_seeds) < replications:
         raise ValueError(
             f"Number of seed values ({len(loaded_seeds)}) does not match the number of replications ({replications}) in {seeds_path}"
         )
