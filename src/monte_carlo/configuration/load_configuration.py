@@ -8,7 +8,10 @@ against the SimulationConfig attrs model.
 from pathlib import Path
 
 import yaml
+from pydantic import ValidationError
 
+from src.monte_carlo.configuration.sensor_loader import resolve_platform_sensors
+from src.schemas.error_handling import human_readable_errors
 from src.schemas.simulation import ConfigData
 
 
@@ -46,17 +49,30 @@ def load_config_from_yaml(yaml_path: Path) -> ConfigData:
         except yaml.YAMLError as e:
             raise yaml.YAMLError(f"Invalid YAML syntax in {yaml_path}: {e}") from e
 
+    # Resolve each platform's sensor type names (e.g. "generic") into full SensorConfig
+    # objects by reading their CSV files, before pydantic ever sees a bare string.
+    platforms = raw_config.get("platforms", [])
+    for platform in platforms:
+        platform["sensors"] = resolve_platform_sensors(platform, yaml_path.parent)
+
     # Construct ConfigData from the parsed YAML
     # The YAML structure has nested keys: simulation, world, agents
     # Flatten these into top-level keys for attrs validation
     config_dict = {
         "simulation": raw_config.get("simulation", {}),
         "world": raw_config.get("world", {}),
-        "platforms": raw_config.get("platforms", []),
+        "platforms": platforms,
     }
 
     # Validate and return the configuration
-    config_data = ConfigData.from_dict(config_dict)
+    try:
+        config_data = ConfigData.from_dict(config_dict)
+    except ValidationError as e:
+        readable_errors = "\n".join(human_readable_errors(e))
+        raise ValueError(
+            f"Invalid configuration in {yaml_path}:\n{readable_errors}"
+        ) from e
+
     return config_data
 
 

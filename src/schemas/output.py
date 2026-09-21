@@ -32,17 +32,23 @@ class PlatformPositionEvent(TypedDict):
     detection_distance_m: Optional[float]
 
 
+class ReplicationSummary(TypedDict):
+    """"""
+
+
 class SimulationResult(TypedDict):
     """Outcome and captured position events for one replication."""
 
     result: Literal["detected", "not_detected"]
     end_condition: Literal[
         "time_limit",
+        "target_escaped",
         "barrier_crossed",
         "world_crossed",
         "detection",
         "counter_detection",
-        "team_detection",
+        "blue_team_detection",
+        "red_team_detection",
     ]
     platform_position_events: list[PlatformPositionEvent]
 

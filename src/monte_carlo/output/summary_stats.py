@@ -39,8 +39,8 @@ def generate_table_1(detection_events_log: list[dict[str, Any]] = None) -> pd.Da
             "detecting_platform_id": pd.Series(dtype="str"),
             "target_platform_id": pd.Series(dtype="str"),
             "average_detections": pd.Series(dtype="float"),
-            "average_detection_distance": pd.Series(dtype="float"),
-            "average_detection_timestamp": pd.Series(dtype="float"),
+            "average_detection_distance_km": pd.Series(dtype="float"),
+            "average_detection_timestamp_minutes": pd.Series(dtype="float"),
         }
     )
 
@@ -48,15 +48,26 @@ def generate_table_1(detection_events_log: list[dict[str, Any]] = None) -> pd.Da
 
 
 def generate_table_2(detection_events_log: list[dict[str, Any]] = None) -> pd.DataFrame:
-    """ """
+    """
+    E.g.
+        1 detecting platform and 2 target platforms:
+        blue_1 (sensor_1 and sensor_2 equipped):
+            red_1:
+                sensor_1: average detections, average detection distance, average detection timestamp
+                sensor_2: average detections, average detection distance, average detection timestamp
+            red_2:
+                sensor_1: average detections, average detection distance, average detection timestamp
+                sensor_2: average detections, average detection distance, average detection timestamp
+
+    """
     df = pd.DataFrame(
         {
             "detecting_platform_id": pd.Series(dtype="str"),
             "sensor_name": pd.Series(dtype="str"),
             "target_platform_id": pd.Series(dtype="str"),
-            "average_detections": pd.Series(dtype="float"),
-            "average_detection_distance": pd.Series(dtype="float"),
-            "average_detection_timestamp": pd.Series(dtype="float"),
+            "average_sensor_detections": pd.Series(dtype="float"),
+            "average_detection_distance_km": pd.Series(dtype="float"),
+            "average_detection_timestamp_minutes": pd.Series(dtype="float"),
         }
     )
 
@@ -91,11 +102,13 @@ def generate_table_4(
     """ """
     df = pd.DataFrame(
         {
+            "replication_id": pd.Series(dtype="int"),
             "detecting_platform_id": pd.Series(dtype="str"),
             "target_platform_id": pd.Series(dtype="str"),
-            "average_detections": pd.Series(dtype="float"),
-            "average_detection_distance": pd.Series(dtype="float"),
-            "average_detection_timestamp": pd.Series(dtype="float"),
+            "sensor_name": pd.Series(dtype="str"),
+            "detection_outcome": pd.Series(dtype="str"),  # True or False
+            "detection_distance_km": pd.Series(dtype="float"),
+            "detection_timestamp_minutes": pd.Series(dtype="float"),
         }
     )
 

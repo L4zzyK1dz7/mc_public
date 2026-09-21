@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from src.schemas.platform import PlatformConfig
@@ -44,7 +46,7 @@ class SimulationConfig(BaseModel):
     seeds_file: bool = Field(
         ..., description="Indicates whether a seeds file is used for the simulation."
     )
-    detection_end_condition: str = Field(
+    detection_end_condition: Literal["initial_detection", "team_detection"] = Field(
         default="initial_detection",
         description="The end condition for detection in the simulation.",
     )

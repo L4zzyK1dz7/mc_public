@@ -4,7 +4,7 @@ Module for defining and managing platform states within the Monte Carlo simulati
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Union
 
 from src.monte_carlo.states.movement_manager import MovementManager, WpProperties
@@ -12,8 +12,10 @@ from src.monte_carlo.states.movement_manager import MovementManager, WpPropertie
 if TYPE_CHECKING:
     import numpy as np
 
+    from src.monte_carlo.detection_pipeline.sensor_state import SensorRuntimeState
     from src.schemas.movement import Waypoint
     from src.schemas.platform import MovementType, PlatformConfig, Team
+    from src.schemas.sensor import SensorConfig
     from src.schemas.simulation import (
         ConfigData,  # Ignore at runtime to prevent circular imports
     )
@@ -32,6 +34,12 @@ class PlatformState:
     pos: Waypoint  # Current position of the platform
     movement_type: MovementType
     wp_properties: WpProperties  # Properties of the current waypoint
+    sensors: list[
+        SensorConfig
+    ]  # Sensors fitted to this platform, used by the detection pipeline
+    sensor_states: "dict[int, SensorRuntimeState]" = field(
+        default_factory=dict
+    )  # Per-sensor evaluation history, keyed by id(sensor) e.g. id(sensor): SensorRuntimeState
 
 
 def initialise_platform_states(
@@ -93,6 +101,7 @@ def initialise_platform_states(
             speed_mps=p.speed_mps,
             movement_type=p.movement_type,
             wp_properties=wp_properties,
+            sensors=p.sensors,
         )
         all_platform_states.append(platform_state)
 

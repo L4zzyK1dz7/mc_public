@@ -6,9 +6,21 @@ from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 
+from src.monte_carlo.configuration.load_configuration import (
+    load_config_from_yaml,
+    load_seeds,
+)
 from src.monte_carlo.detection_pipeline.pipeline import detect
-from src.monte_carlo.end_conditions import EndCondition, check_end_conditions
-from src.monte_carlo.load_configuration import load_config_from_yaml, load_seeds
+from src.monte_carlo.end_conditions import (
+    EndCondition,
+    EndConditionFacts,
+    check_end_conditions,
+)
+from src.monte_carlo.end_conditions.facts import (
+    all_platforms_detected,
+    platforms_by_team,
+    target_has_escaped,
+)
 from src.monte_carlo.output.aggregate_results import aggregate_and_output_results
 from src.monte_carlo.output.file_utils import get_next_run_folder
 from src.monte_carlo.output.outcome_position_manager import OutcomePositionManager
@@ -17,6 +29,10 @@ from src.monte_carlo.states.platform_states import initialise_platform_states
 from src.schemas.output import SimulationResult, SimulationResults
 
 if TYPE_CHECKING:
+    from src.monte_carlo.detection_pipeline.events import DetectionEvent
+    from src.monte_carlo.end_conditions import (
+        EndCondition,  # Ignore at runtime to prevent circular imports
+    )
     from src.monte_carlo.states.platform_states import (
         PlatformState,  # Ignore at runtime to prevent circular imports
     )
@@ -68,6 +84,7 @@ def _execute_single_replication(
 
     sim_time_sec: float = 0.0
     end_condition: Optional[EndCondition] = None
+    detected_target_ids: set[str] = set()  # For team detection.
 
     # Main timestepping loop
     for step in range(max_steps):
@@ -86,38 +103,80 @@ def _execute_single_replication(
             outcome_manager.record_waypoint_generated(platform, sim_time_sec)
 
         # Perform detection based on the current platform states.
-        detection = detect(
+        detection: Optional[DetectionEvent] = detect(
             platform_states=platform_states,
             current_time_sec=sim_time_sec,
+            random_gen=random_gen,
         )
 
-        end_condition = check_end_conditions(
+        if detection is not None:
+            detected_target_ids.add(detection.target_platform_id)
+            detecting_platform = next(
+                platform
+                for platform in platform_states
+                if platform.id == detection.detecting_platform_id
+            )
+            outcome_manager.record_detection(
+                platform=detecting_platform,
+                timestamp=sim_time_sec,
+                target_platform_id=detection.target_platform_id,
+                sensor_name=detection.sensor_name,
+                distance_m=detection.distance_m,
+            )
+
+        # Group both teams; either team can be the target of a team detection.
+        teams: dict[str, list] = platforms_by_team(platform_states)  # Blue and Red
+        completed_team = None
+        if config_data.simulation.detection_end_condition == "team_detection":
+            for team_name, team_platforms in teams.items():
+                if all_platforms_detected(
+                    required_platform_ids={platform.id for platform in team_platforms},
+                    detected_platform_ids=detected_target_ids,
+                ):
+                    completed_team = team_name
+                    break
+
+        # The target team is inferred from the platforms whose IDs were detected.
+        target_states = (
+            teams[completed_team]
+            if completed_team is not None
+            else [
+                platform
+                for team_platforms in teams.values()
+                for platform in team_platforms
+            ]
+        )
+
+        # Determine the EndCondition facts based on the current simulation state.
+        facts = EndConditionFacts(
+            detection=(
+                detection
+                if config_data.simulation.detection_end_condition == "initial_detection"
+                else None
+            ),
+            team_detection=(
+                detection
+                if config_data.simulation.detection_end_condition == "team_detection"
+                else None
+            ),
+            completed_team=completed_team,
+            target_escaped=any(
+                target_has_escaped(target=target, world=config_data.world)
+                for target in target_states
+            ),
+        )
+
+        end_condition: Optional[EndCondition] = check_end_conditions(
             current_time_sec=sim_time_sec,
             current_step=step,
             max_steps=max_steps,
-            detection=detection,
+            facts=facts,
         )
 
         if end_condition is None:
             continue  # Everything below is skipped if no end condition is met, noting to record, move to next timestep
 
-        if end_condition.condition == "detection":
-            assert end_condition.detection is not None
-
-            # Iterate through platform states to find the detecting platform.
-            detecting_platform = next(
-                platform
-                for platform in platform_states
-                if platform.id == end_condition.detection.detecting_platform_id
-            )
-            outcome_manager.record_detection(
-                platform=detecting_platform,
-                timestamp=end_condition.timestamp_sec,
-                target_platform_id=end_condition.detection.target_platform_id,
-                sensor_name=end_condition.detection.sensor_name,
-                distance_m=end_condition.detection.distance_m,
-            )
-        elif end_condition.condition == "time_limit":
+        if end_condition.condition == "time_limit":
             outcome_manager.record_time_limit(
                 platform_states,
                 end_condition.timestamp_sec,
@@ -132,7 +191,7 @@ def _execute_single_replication(
         "end_condition": end_condition.condition,
         "platform_position_events": outcome_manager.events,
     }
-    logger.info("Simulation Result: %s", simulation_result)
+    logger.info("Simulation Result: %s", simulation_result.get("result"))
     return simulation_result
 
 
