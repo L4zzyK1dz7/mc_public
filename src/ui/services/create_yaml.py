@@ -4,13 +4,14 @@ import csv
 import logging
 import shutil
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Union
 
+import numpy as np
 import yaml
 
 if TYPE_CHECKING:
     from src.schemas.platform import PlatformConfig
-    from src.schemas.sensor import SensorConfig
+    from src.schemas.sensor import GenericSensorConfig, SpecificSensorConfig
     from src.schemas.simulation import ConfigData
 
 logger = logging.getLogger(__name__)
@@ -18,7 +19,7 @@ logger.setLevel(logging.INFO)
 
 
 def create_sensor_file(
-    sensor: SensorConfig,
+    sensor: Union[GenericSensorConfig, SpecificSensorConfig],
     platform_path: Path,
 ) -> bool:
     """
@@ -53,8 +54,9 @@ def create_sensor_file(
         pod = sensor_dict.pop("pod")
 
         # if generic x_values is set to range_m
-        if sensor.type == "generic":
-            x_values_label = "range_m"
+        x_values_label = "range_m"
+        if sensor.type == "specific":
+            x_values_label = "x_value"
 
         with open(sensor_file, "w", newline="") as f:
             # Metadata comment header for every field except the x_values/pod table
@@ -118,7 +120,9 @@ def organise_input_data_directory(
         (platform_path / "user_defined_movements").mkdir(parents=True, exist_ok=True)
 
         # If the platform has a sensor add the sensor files to the appropriate directories
-        sensors: list[SensorConfig] = platform.sensors
+        sensors: list[Union[GenericSensorConfig, SpecificSensorConfig]] = (
+            platform.sensors
+        )
         if sensors:
             for sensor in sensors:
                 # Create and populate sensor file
@@ -131,13 +135,18 @@ def generate_seeds_file(replications: int) -> None:
     """
     Generate a seeds.txt file with random seeds.
     """
-    import random
+    seed_generator = np.random.default_rng()
+    child_rngs: list[np.random.Generator] = seed_generator.spawn(replications)
+    seeds: list[int] = [
+        int(rng.bit_generator.seed_seq.generate_state(1)[0])
+        for rng in child_rngs  # provides 1 32-bit unsigned integer as array([int], dtype=uint32)
+    ]
 
     seeds_path = Path("input_data/seeds.txt")
     seeds_path.parent.mkdir(parents=True, exist_ok=True)
     with open(seeds_path, "w") as f:
-        for _ in range(replications):  # Generate seeds based on replications
-            f.write(f"{random.randint(0, 1000000)}\n")
+        for seed in seeds:
+            f.write(f"{seed}\n")
 
 
 def create_config_yaml(

@@ -15,6 +15,8 @@ from src.ui.views.create_platform_sensors import render_sensor_creation
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+KM_TO_M = 1000.0
+
 
 def is_platform_draft_ready() -> bool:
     """
@@ -29,11 +31,25 @@ def is_platform_draft_ready() -> bool:
     has_movement = bool(draft.get("movement_type"))
     movement_config = draft.get("movement_config", {})
 
+    if has_name and _is_duplicate_platform_name(draft.get("display_name", "")):
+        return False
+
     if draft.get("movement_type") == "User Defined Waypoints":
         has_waypoints = bool(movement_config.get("waypoints"))
         return has_name and has_team and has_movement and has_waypoints
 
     return has_name and has_team and has_movement
+
+
+def _is_duplicate_platform_name(display_name: str) -> bool:
+    """
+    Check whether a platform with the given display name already exists in the draft list.
+    """
+    existing_names = {
+        platform.display_name.strip().lower()
+        for platform in st.session_state.get("platform_draft_list", [])
+    }
+    return str(display_name).strip().lower() in existing_names
 
 
 def render_platform_movement_inputs(movement_type: str) -> dict:
@@ -49,13 +65,14 @@ def render_platform_movement_inputs(movement_type: str) -> dict:
             st.caption("Random walk does not require extra parameters.")
 
         elif movement_type == "Intruder Search":
-            movement_config["start_distance"] = st.number_input(
-                "Start Distance",
+            start_distance_km = st.number_input(
+                "Start Distance (km)",
                 min_value=0.0,
                 value=0.0,
                 step=0.1,
                 key="start_distance",
             )
+            movement_config["start_distance_m"] = start_distance_km * KM_TO_M
             end_condition = st.selectbox(
                 "End Condition",
                 options=[condition.value for condition in IntruderEndCondition],
@@ -64,38 +81,42 @@ def render_platform_movement_inputs(movement_type: str) -> dict:
             movement_config["end_condition"] = end_condition
 
         elif movement_type == "Barrier Patroller":
-            movement_config["start_x_pos"] = st.number_input(
-                "Start X Position",
+            start_x_pos_km = st.number_input(
+                "Start X Position (km)",
                 value=0.0,
                 step=0.1,
                 key="start_x_pos",
             )
-            movement_config["start_y_pos"] = st.number_input(
-                "Start Y Position",
+            movement_config["start_x_pos"] = start_x_pos_km * KM_TO_M
+            start_y_pos_km = st.number_input(
+                "Start Y Position (km)",
                 value=0.0,
                 step=0.1,
                 key="movement_start_y_pos",
             )
-            movement_config["length"] = st.number_input(
-                "Patrol Length",
+            movement_config["start_y_pos"] = start_y_pos_km * KM_TO_M
+            length_km = st.number_input(
+                "Patrol Length (km)",
                 min_value=0.0,
-                value=100.0,
-                step=1.0,
+                value=0.1,
+                step=0.01,
                 key="movement_length",
             )
-            movement_config["height"] = st.number_input(
-                "Patrol Height",
+            movement_config["length"] = length_km * KM_TO_M
+            height_km = st.number_input(
+                "Patrol Height (km)",
                 min_value=0.0,
-                value=100.0,
-                step=1.0,
+                value=0.1,
+                step=0.01,
                 key="movement_height",
             )
+            movement_config["height"] = height_km * KM_TO_M
 
         elif movement_type == "User Defined Waypoints":
             import_tab, manual_tab = st.tabs(["Import CSV", "Manual Input"])
 
             with import_tab:
-                st.markdown("Upload a CSV with `x` and `y` columns.")
+                st.markdown("Upload a CSV with `x` and `y` columns (in km).")
                 uploaded_waypoints = st.file_uploader(
                     "Choose a waypoint CSV file",
                     type="csv",
@@ -106,13 +127,17 @@ def render_platform_movement_inputs(movement_type: str) -> dict:
                     if {"x", "y"}.issubset(waypoint_table.columns):
                         st.dataframe(waypoint_table[["x", "y"]], width="stretch")
                         movement_config["waypoints"] = [
-                            {"x": float(row["x"]), "y": float(row["y"])}
+                            {
+                                "x": float(row["x"]) * KM_TO_M,
+                                "y": float(row["y"]) * KM_TO_M,
+                            }
                             for _, row in waypoint_table[["x", "y"]].iterrows()
                         ]
                     else:
                         st.error("Waypoint CSV must contain `x` and `y` columns.")
 
             with manual_tab:
+                st.caption("Enter x and y coordinates in km.")
                 default_waypoint_table = pd.DataFrame([{"x": 0.0, "y": 0.0}])
                 waypoint_table = st.data_editor(
                     default_waypoint_table,
@@ -122,7 +147,10 @@ def render_platform_movement_inputs(movement_type: str) -> dict:
                 )
                 if "waypoints" not in movement_config:
                     movement_config["waypoints"] = [
-                        {"x": float(row["x"]), "y": float(row["y"])}
+                        {
+                            "x": float(row["x"]) * KM_TO_M,
+                            "y": float(row["y"]) * KM_TO_M,
+                        }
                         for _, row in waypoint_table.iterrows()
                     ]
 
@@ -142,6 +170,10 @@ def render_platform_creation() -> bool:
         placeholder="Enter platform name",
         value="Platform 1",
     )
+    if platform_name and _is_duplicate_platform_name(platform_name):
+        st.error(
+            f"A platform named '{platform_name}' already exists. Choose a different name."
+        )
     platform_speed = st.number_input(
         "Platform Speed (m/s)", min_value=0.0, value=0.0, step=0.1, key="platform_speed"
     )
@@ -158,6 +190,18 @@ def render_platform_creation() -> bool:
         ],
         key="platform_movement_type",
     )
+
+    # neutralised behaviour
+    platform_neutralised_behaviour = st.selectbox(
+        "Neutralised Platform Behaviour",
+        options=[
+            "Stop",
+            "Continue",
+        ],
+        key="platform_neutralised_behaviour",
+        help="Required for Team Detection. Determines how the platform behaves when neutralised.",
+    )
+
     platform_movement_config = render_platform_movement_inputs(platform_movement_type)
 
     st.session_state.platform_draft = {
@@ -166,6 +210,7 @@ def render_platform_creation() -> bool:
         "team": platform_team,
         "movement_type": platform_movement_type,
         "movement_config": platform_movement_config,
+        "neutralised_behaviour": platform_neutralised_behaviour,
     }
 
     return is_platform_draft_ready()
@@ -182,6 +227,13 @@ def create_platform() -> None:
             platform_draft,
             st.session_state.platform_draft_list,
         )
+
+        if _is_duplicate_platform_name(platform_draft.get("display_name", "")):
+            st.warning(
+                f"A platform named '{platform_draft.get('display_name')}' already exists. Choose a different name."
+            )
+            return
+
         sensor_draft_list = st.session_state.get("sensor_draft_list", [])
         if sensor_draft_list:
             platform_draft["sensors"] = sensor_draft_list
@@ -189,14 +241,19 @@ def create_platform() -> None:
         logger.info("Creating platform with draft: %s", platform_draft)
 
         try:
-            # platform = PlatformDraft.create_from_dict(platform_draft)
+            # # Resolve Sensor Config
+            # sensor_types: list[str] = platform_draft.get("sensors") or []
+            # sensor_config = [SensorFactory.create_sensor(sensor_type) for sensor_type in sensor_types]
+
             platform = PlatformConfig(
                 platform_config_folder=platform_draft["display_name"],
                 display_name=platform_draft["display_name"],
                 speed_mps=platform_draft["speed"],
                 team=platform_draft["team"],
                 movement_type=platform_draft["movement_config"],
-                neutralised_platform_behaviour="stop",  # TODO: Make this configurable in the UI if needed
+                neutralised_platform_behaviour=platform_draft[
+                    "neutralised_behaviour"
+                ],  # TODO: Make this configurable in the UI if needed
                 sensors=platform_draft.get("sensors", []),
             )
             st.session_state.platform_draft_list.append(platform)

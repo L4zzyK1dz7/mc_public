@@ -46,6 +46,7 @@ class DetectionOutcomeEvent(TypedDict):
     detection_outcome: bool
     detection_distance_m: Optional[float]
     detection_timestamp_sec: Optional[float]
+    end_condition: Optional[str]
 
 
 class SimulationResult(TypedDict):

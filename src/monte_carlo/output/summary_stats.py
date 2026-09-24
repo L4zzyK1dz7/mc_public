@@ -203,6 +203,7 @@ def generate_table_4(
         "detection_outcome",
         "detection_distance_km",
         "detection_timestamp_minutes",
+        "end_condition",
     ]
 
     df = _build_detection_outcomes_df(detection_outcomes or [])

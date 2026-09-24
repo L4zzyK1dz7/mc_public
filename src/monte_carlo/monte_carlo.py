@@ -179,15 +179,16 @@ def _execute_single_replication(
         if end_condition is None:
             continue  # Everything below is skipped if no end condition is met, noting to record, move to next timestep
 
-        if end_condition.condition == "time_limit":
-            outcome_manager.record_time_limit(
-                platform_states,
-                end_condition.timestamp_sec,
-            )
+        outcome_manager.record_time_limit(
+            platform_states,
+            end_condition.timestamp_sec,
+        )
 
         break  # Exit the main timestepping loop once an end condition is reached
 
     assert end_condition is not None
+
+    detection_manager.set_end_condition(end_condition.condition)
 
     simulation_result: SimulationResult = {
         "result": end_condition.result,
@@ -195,7 +196,11 @@ def _execute_single_replication(
         "platform_position_events": outcome_manager.events,
         "detection_outcomes": detection_manager.rows,
     }
-    logger.info("Simulation Result: %s", simulation_result.get("result"))
+    logger.info(
+        "Simulation Result: %s, End Condition: %s",
+        simulation_result.get("result"),
+        simulation_result.get("end_condition"),
+    )
     return simulation_result
 
 
@@ -210,8 +215,6 @@ def _execute_monte_carlo(
 
     simulation_results: SimulationResults = []
 
-    movement_manager = MovementManager()  # initialise the movement manager
-
     # Main replication loop
     for replication_id in range(number_of_replications):
         logger.info("Starting replication %d", replication_id)
@@ -220,6 +223,8 @@ def _execute_monte_carlo(
         seed = seeds[replication_id] if seeds is not None else None
         outcome_manager = OutcomePositionManager(replication_id)
         detection_manager = OutcomeDetectionManager(replication_id)
+
+        movement_manager = MovementManager()  # initialise the movement manager
 
         replication_result = _execute_single_replication(
             config_data, movement_manager, outcome_manager, detection_manager, seed
@@ -262,6 +267,7 @@ def run_simulation(
     config_data: ConfigData = load_config_from_yaml(config_path)
 
     # === 2. Initialise Seeds ===
+    seeds_path = config_path.parent
     if config_data.simulation.seeds_file:
         seeds_path = config_path.parent / "seeds.txt"
         try:
@@ -275,13 +281,18 @@ def run_simulation(
     else:
         # If no seeds were loaded from a file, generate them now. This makes the run reproducible later by saving these generated seeds.
         seed_generator = np.random.default_rng()
-        seeds: list[int] = seed_generator.integers(
-            low=0, high=2**32 - 1, size=config_data.simulation.replications
-        ).tolist()
-        logger.info(
-            "Generated %d new random seeds for this run.",
-            config_data.simulation.replications,
+        child_rngs: list[np.random.Generator] = seed_generator.spawn(
+            config_data.simulation.replications
         )
+        seeds: list[int] = [
+            int(rng.bit_generator.seed_seq.generate_state(1)[0])
+            for rng in child_rngs  # provides 1 32-bit unsigned integer as array([int], dtype=uint32)
+        ]
+        seeds_output_path = seeds_path / "seeds.txt"
+        with open(seeds_output_path, "w", encoding="utf-8") as f:
+            for seed in seeds:
+                f.write(f"{seed}\n")
+        logger.info("Saved %d generated seeds to %s", len(seeds), seeds_output_path)
 
     # Determine output directory if not already specified, to save seeds.
     if output_dir is None:

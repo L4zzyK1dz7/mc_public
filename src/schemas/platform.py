@@ -11,7 +11,7 @@ from src.schemas.movement import (
     RandomWalkMovement,
     UserDefinedWaypointsMovement,
 )
-from src.schemas.sensor import SensorConfig
+from src.schemas.sensor import GenericSensorConfig, SpecificSensorConfig
 
 
 # ==========================
@@ -69,7 +69,7 @@ class PlatformConfig(BaseModel):
         default=neutralised_platform_behaviour_options,
         description="The behaviour of the platform when neutralised, either 'stop' or 'continue'.",
     )
-    sensors: list[SensorConfig] = Field(
+    sensors: list[Union[GenericSensorConfig, SpecificSensorConfig]] = Field(
         default_factory=list,
         description="A list of sensors associated with the platform. Can be empty if not specified.",
     )

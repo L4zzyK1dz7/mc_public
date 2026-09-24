@@ -47,6 +47,7 @@ class OutcomeDetectionManager:
                     "detection_outcome": False,
                     "detection_distance_m": None,
                     "detection_timestamp_sec": None,
+                    "end_condition": None,
                 }
 
     def record_detection(self, detection: DetectionEvent, timestamp: float) -> None:
@@ -64,4 +65,27 @@ class OutcomeDetectionManager:
             "detection_outcome": True,
             "detection_distance_m": detection.distance_m,
             "detection_timestamp_sec": timestamp,
+            "end_condition": None,
         }
+
+    def set_end_condition(self, end_condition: str) -> None:
+        """Stamp every seeded row with the replication's terminal condition, so summary
+        stats can show why a replication ended even when no detection occurred.
+        """
+        if not self._rows:
+            # No sensor/target pairs were ever seeded (e.g. no sensors equipped) -
+            # emit a placeholder row so the replication's end_condition is still visible.
+            self._rows[("", "", "")] = {
+                "replication_id": self.replication_id,
+                "detecting_platform_id": "",
+                "sensor_name": "",
+                "target_platform_id": "",
+                "detection_outcome": False,
+                "detection_distance_m": None,
+                "detection_timestamp_sec": None,
+                "end_condition": end_condition,
+            }
+            return
+
+        for row in self._rows.values():
+            row["end_condition"] = end_condition

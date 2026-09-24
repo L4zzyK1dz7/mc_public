@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Dict, Iterable, List, cast
 
+from src.schemas.movement import IntruderSearchMovement
 from src.schemas.simulation import World
 
 if TYPE_CHECKING:
@@ -52,8 +53,8 @@ def target_has_escaped(*, target: PlatformState, world: World) -> bool:
     Returns:
         True if the target has escaped the world boundaries, False otherwise.
     """
-
-    return not (
-        world.origin_x <= target.pos.x <= world.origin_x + world.length
-        and world.origin_y <= target.pos.y <= world.origin_y + world.height
-    )
+    # Only an intruder can escape, by reaching or crossing the bottom of the world;
+    # starting above the world's height (its spawn point) doesn't count as escaped.
+    if isinstance(target.movement_type, IntruderSearchMovement):
+        return target.pos.y <= world.origin_y
+    return False

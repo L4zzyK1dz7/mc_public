@@ -64,8 +64,8 @@ class GenericSensorDetectionStrategy(SensorDetectionStrategy):
         state.next_eval_time_sec = current_time_sec + sensor.interval_time_sec
 
         platform_heading_deg = self._heading_deg(detecting_platform)
-        fov_start = getattr(sensor, "fov_start_angle", 0.0)
-        fov_end = getattr(sensor, "fov_end_angle", 360.0)
+        fov_start = getattr(sensor, "fov_start_deg", 0.0)
+        fov_end = getattr(sensor, "fov_end_deg", 360.0)
 
         detections: list[DetectionEvent] = []
 
@@ -97,7 +97,6 @@ class GenericSensorDetectionStrategy(SensorDetectionStrategy):
 
             # 5. Evaluate PoD against Rnd number and record result into sliding window
             window.append(bool(random_gen.random() < pod))
-            print(window, distance_m, sensor.x_values, max(sensor.x_values))
             # 6. Evaluate K-of-n
             if sum(window) >= sensor.k:
                 detections.append(

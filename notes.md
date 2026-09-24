@@ -21,6 +21,9 @@ Completed sensor validation, created factory pattern with human readable error m
 Completed Movement Type Strategy Pattern. 
 
 Next steps:
-- Prevent Platform creation with same name 
-- Start Monte Carlo Engine and Create summary stats and raw_positions.csv 
-- Connect the outputs with plotly UI visuals 
+- Prevent Platform and sensor creation with same name in the UI  - Done 23/09/2026
+- Barrier movement and waypoint movement 
+- test Team base detection.
+- Sensor Config now only takes Generic and Specific changed PlatformConfig to accept them two instead of the base allowing .csv to retain the config data instead of just the baseclass. 23/09/2026
+- Start Monte Carlo Engine and Create summary stats and raw_positions.csv  - 23/09/26 done 
+- Connect the outputs with plotly UI visuals - 23/09/26 done 

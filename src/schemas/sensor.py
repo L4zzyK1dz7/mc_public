@@ -39,18 +39,18 @@ class GenericSensorConfig(SensorConfig):
     Inherits from SensorConfig and adds additional attributes specific to generic sensors.
 
     Attributes:
-        fov_start_angle (float): The starting angle of the field of view for the generic sensor.
-        fov_end_angle (float): The ending angle of the field of view for the generic sensor.
+        fov_start_deg (float): The starting angle of the field of view for the generic sensor.
+        fov_end_deg (float): The ending angle of the field of view for the generic sensor.
     """
 
     type: str = Field("generic")
-    fov_start_angle: float = Field(
+    fov_start_deg: float = Field(
         ge=0.0,
         le=360.0,
         default=0.0,
         description="The starting angle of the field of view.",
     )
-    fov_end_angle: float = Field(
+    fov_end_deg: float = Field(
         ge=0.0,
         le=360.0,
         default=360.0,

@@ -84,13 +84,26 @@ def _build_sensor_summary(sensor_draft_list: list[SensorConfig]) -> pd.DataFrame
                 "index": index + 1,
                 "name": draft.get("display_name", ""),
                 "interval_time_sec": draft.get("interval_time_sec", 1.0),
-                "type": draft.get("sensor_type", "").capitalize(),
+                "type": draft.get("type", "").capitalize(),
+                "fov_start_deg": draft.get("fov_start_deg", None),
+                "fov_end_deg": draft.get("fov_end_deg", None),
                 "x_values": draft.get("x_values", []),
                 "pod": draft.get("pod", []),
                 "status": "Ready",
             }
         )
     return pd.DataFrame(rows)
+
+
+def _is_duplicate_sensor_name(display_name: str) -> bool:
+    """
+    Check whether a sensor with the given display name already exists in the draft list.
+    """
+    existing_names = {
+        sensor.display_name.strip().lower()
+        for sensor in st.session_state.get("sensor_draft_list", [])
+    }
+    return display_name.strip().lower() in existing_names
 
 
 def _save_sensor(
@@ -107,10 +120,17 @@ def _save_sensor(
         st.warning(f"Sensor {index + 1}: Display name cannot be empty.")
         return
 
+    if _is_duplicate_sensor_name(display_name):
+        st.warning(
+            f"Sensor {index + 1}: A sensor named '{display_name}' already exists. Choose a different name."
+        )
+        return
+
     # Create Sensor Config
     sensor_config: tuple[Optional[SensorConfig], list[str]] = (
         SensorFactory.create_sensor(**sensor_data_payload)
     )
+    logger.info("Sensor config created: %s", sensor_config)
 
     if sensor_config[0] is None:
         error_messages = sensor_config[1]
@@ -266,11 +286,44 @@ def _render_single_sensor_editor(index: int) -> None:
             key=f"sensor_interval_time_widget_{index}",
             value=1.0,
             min_value=0.0,
+            help="Time interval between sensor evaluations in seconds.",
         )
 
         # K of N
-        k = st.number_input("K", key=k_key, value=3, min_value=1)
-        n = st.number_input("N", key=n_key, value=5, min_value=1)
+        k = st.number_input(
+            "K",
+            key=k_key,
+            value=3,
+            min_value=1,
+            help="Determines the number of True detections",
+        )
+        n = st.number_input(
+            "N",
+            key=n_key,
+            value=5,
+            min_value=1,
+            help="Determines the size of the sliding window for K-of-N evaluation",
+        )
+
+        if sensor_type == "generic":
+            fov_start_deg = st.number_input(
+                "FOV Start (deg)",
+                key=f"sensor_fov_start_widget_{index}",
+                value=0.0,
+                min_value=0.0,
+                help="Field of View (degrees), 0 degrees points East and moves counterclockwise around the platform and moves with it as the platform moves.",
+            )
+            fov_end_deg = st.number_input(
+                "FOV End (deg)",
+                key=f"sensor_fov_end_widget_{index}",
+                value=90.0,
+                min_value=0.0,
+                max_value=360.0,
+                help="Field of View (degrees), 0 degrees points East and moves counterclockwise around the platform and moves with it as the platform moves.",
+            )
+        else:
+            fov_start_deg = None
+            fov_end_deg = None
 
         default_table = {
             "x_values": [0, 100, 200, 500, 1000],
@@ -281,6 +334,8 @@ def _render_single_sensor_editor(index: int) -> None:
             "display_name": display_name,
             "sensor_type": sensor_type,
             "interval_time_sec": interval_time_sec,
+            "fov_start_deg": fov_start_deg,
+            "fov_end_deg": fov_end_deg,
             "x_values": default_table["x_values"],
             "pod": default_table["pod"],
             "k": k,

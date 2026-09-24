@@ -46,6 +46,7 @@ def make_platform_state(
         speed_mps=0.0,
         pos=Waypoint(x=x, y=y),
         movement_type=None,
+        movement_state=None,
         wp_properties=WpProperties(
             pos=Waypoint(x=x, y=y),
             arrival_time=0.0,

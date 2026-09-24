@@ -11,9 +11,11 @@ from typing import TYPE_CHECKING, TypedDict
 
 import numpy as np
 
+from src.monte_carlo.states.movement_state import get_next_position
 from src.schemas.movement import Waypoint
 
 if TYPE_CHECKING:
+    from src.monte_carlo.states.movement_state import MovementState
     from src.monte_carlo.states.platform_states import PlatformState
     from src.schemas.platform import MovementType
     from src.schemas.simulation import ConfigData
@@ -112,6 +114,7 @@ class MovementManager:
         movement_type: MovementType,
         config_data: ConfigData,
         random_gen: np.random.Generator,
+        movement_state: MovementState,
     ) -> Waypoint:
         """
         Get the next waypoint for the platform based on the given movement type.
@@ -120,12 +123,17 @@ class MovementManager:
             movement_type: The type of movement to apply based on the PlatformState.
             config_data: The configuration data for the simulation based on user input. This provides information about the environment in which the platform is operating.
             random_gen: The random number generator to use for stochastic movement calculations.
+            movement_state: Per-replication runtime state matching this platform's movement type.
 
         Returns:
             Waypoint: The new position of the platform.
         """
 
-        new_pos = movement_type.get_next_position(
+        # movement_state is created via create_movement_state(movement_type), so the concrete
+        # types always match even though static typing can't express the pairing across the union
+        new_pos = get_next_position(
+            movement_type=movement_type,
+            state=movement_state,
             config_data=config_data,
             random_gen=random_gen,
         )
@@ -170,7 +178,9 @@ class MovementManager:
         assert (
             current_position.x != next_position.x
             or current_position.y != next_position.y
-        ), "Current position and next position must not be the same."
+        ), (
+            f"Current position ({current_position.x}, {current_position.y}) and next position ({next_position.x}, {next_position.y}) must not be the same."
+        )
 
         start = np.array([current_position.x, current_position.y])
         end = np.array([next_position.x, next_position.y])
@@ -241,7 +251,7 @@ class MovementManager:
             if p.wp_properties.arrival_time <= sim_time_sec:
                 # Waypoint reached then generate new waypoint, distance, direction and next_arrival_time
                 new_wp: Waypoint = self.get_waypoint(
-                    p.movement_type, config_data, random_gen
+                    p.movement_type, config_data, random_gen, p.movement_state
                 )
 
                 wp_properties: WpProperties = self.calculate_wp_properties(

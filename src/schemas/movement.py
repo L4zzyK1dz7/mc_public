@@ -1,14 +1,18 @@
+"""
+Static movement configuration schemas for platforms. Loaded once from user
+input (YAML/UI) and safely reused across every Monte Carlo replication.
+
+Per-replication runtime state (spawn flags, current waypoint index, etc.) and
+the get_next_position logic live in src/monte_carlo/states/movement_state.py,
+kept separate so these config objects never carry mutable simulation state.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING
 
-import numpy as np
 from pydantic import BaseModel, Field
-
-if TYPE_CHECKING:
-    from src.schemas.simulation import ConfigData
 
 
 @dataclass
@@ -26,8 +30,8 @@ class IntruderEndCondition(Enum):
     Represents the end conditions for an intruder movement type.
     """
 
-    CROSS_BARRIER = "cross_barrier"
     CROSS_WORLD = "cross_world"
+    CROSS_BARRIER = "cross_barrier"
 
 
 class RandomWalkMovement(BaseModel):
@@ -39,73 +43,26 @@ class RandomWalkMovement(BaseModel):
         "random_walk",
     )
 
-    def execute(self) -> None:
-        """
-        Execute the random walk movement.
-        """
-        print("Random Walking....")
-
-    def get_next_position(
-        self,
-        config_data: ConfigData,
-        random_gen: np.random.Generator,
-    ) -> Waypoint:
-        """
-        Get the next position for the random walk movement based on the current position.
-
-        Args:
-            current_pos (Waypoint): The current position of the platform.
-            config_data (ConfigData): The configuration data for the simulation based on user input. This provides information about the environment in which the platform is operating.
-
-        Returns:
-            Waypoint: The next position for the platform.
-        """
-
-        world = config_data.world
-
-        # Generate a random waypoint position bounded by the world dimensions randomly
-        next_pos = Waypoint(
-            x=random_gen.uniform(world.origin_x, world.origin_x + world.length),
-            y=random_gen.uniform(world.origin_y, world.origin_y + world.height),
-        )
-
-        return next_pos
-
 
 class IntruderSearchMovement(BaseModel):
     """
     Represents an intruder search movement configuration for a platform.
     Attributes:
         type (str): The type of movement, which is "intruder_search" for this configuration.
-        start_distance (float): The starting distance for the intruder search. Must be non-negative.
+        start_distance_m (float): The starting distance for the intruder search. Must be non-negative.
         end_condition (IntruderEndCondition): The end condition for the intruder search, which can be either CROSS_BARRIER or CROSS_WORLD.
     """
 
     type: str = Field(
         "intruder_search",
     )
-    start_distance: float = Field(
+    start_distance_m: float = Field(
         default=0, description="The starting distance for the intruder search.", ge=0
     )
     end_condition: IntruderEndCondition = Field(
         default=IntruderEndCondition.CROSS_WORLD,
         description="The end condition for the intruder search.",
     )
-
-    def execute(self) -> None:
-        """
-        Execute the intruder search movement.
-        """
-        print("Intruder Searching....")
-
-    def get_next_position(
-        self,
-        config_data: ConfigData,
-        random_gen: np.random.Generator,
-    ) -> Waypoint:
-        raise NotImplementedError(
-            "get_next_position method is not implemented for IntruderSearchMovement."
-        )
 
 
 class BarrierPatrollerMovement(BaseModel):
@@ -127,23 +84,6 @@ class BarrierPatrollerMovement(BaseModel):
     length: float = Field(..., description="The length of the barrier to patrol.", ge=0)
     height: float = Field(..., description="The height of the barrier to patrol.", ge=0)
 
-    def execute(self) -> None:
-        """
-        Execute the barrier patroller movement.
-        """
-        print("Patrolling Barrier....")
-
-        # Check if waypoint should be updated
-
-    def get_next_position(
-        self,
-        config_data: ConfigData,
-        random_gen: np.random.Generator,
-    ) -> Waypoint:
-        raise NotImplementedError(
-            "get_next_position method is not implemented for BarrierPatrollerMovement."
-        )
-
 
 class UserDefinedWaypointsMovement(BaseModel):
     """
@@ -158,18 +98,3 @@ class UserDefinedWaypointsMovement(BaseModel):
         default_factory=list,
         description="A list of waypoints representing the user-defined path.",
     )
-
-    def execute(self) -> None:
-        """
-        Execute the user-defined waypoints movement.
-        """
-        print("Following User-Defined Waypoints....")
-
-    def get_next_position(
-        self,
-        config_data: ConfigData,
-        random_gen: np.random.Generator,
-    ) -> Waypoint:
-        raise NotImplementedError(
-            "get_next_position method is not implemented for UserDefinedWaypointsMovement."
-        )

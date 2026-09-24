@@ -70,8 +70,27 @@ def build_positions_df(
         append to or write as raw_positions.csv.
     """
     df = pd.DataFrame(platform_position_events)
+    # Fast exit if dataset is empty
     if df.empty:
         return pd.DataFrame(CSV_COLUMN_ORDER)
+
+    # Coerce columns to numeric dtypes
+    cols_to_convert = [
+        "pos_x",
+        "pos_y",
+        "waypoint_x",
+        "waypoint_y",
+        "speed",
+        "timestamp",
+        "detection_distance_m",
+    ]
+
+    # Ensure numeric types across all columns
+    for col in cols_to_convert:
+        if col in df.columns:
+            df[col] = pd.to_numeric(
+                df[col], errors="coerce"
+            )  # convert objects into NaN (float64)
 
     # Unit conversions
     df["pos_x_km"] = (df["pos_x"] / 1000.0).round(2)
