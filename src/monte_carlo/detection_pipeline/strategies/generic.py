@@ -77,7 +77,9 @@ class GenericSensorDetectionStrategy(SensorDetectionStrategy):
             window = state.get_window(target.id, sensor.n)
 
             # 2. Check if target is within the sensor's maximum range; a miss still consumes a slot in the sliding window
-            if distance_m > max(sensor.x_values):
+            max_range = max(sensor.x_values) if sensor.x_values else 0.0
+
+            if distance_m > max_range:
                 window.append(False)
                 continue
 

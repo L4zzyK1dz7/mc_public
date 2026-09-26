@@ -19,12 +19,12 @@ def make_sensor(**overrides) -> GenericSensorConfig:
     defaults = dict(
         display_name="Sensor 1",
         interval_time_sec=0.0,
-        x_values=[0.0],
+        x_values=[100.0],
         pod=[1.0],
         k=1,
         n=1,
-        fov_start_angle=0.0,
-        fov_end_angle=360.0,
+        fov_start_deg=0.0,
+        fov_end_deg=360.0,
     )
     defaults.update(overrides)
     return GenericSensorConfig(**defaults)
@@ -61,7 +61,7 @@ def test_interval_gating_blocks_reevaluation_until_elapsed(
 
 def test_target_outside_fov_is_never_detected(platform_factory, fake_random_gen):
     strategy = GenericSensorDetectionStrategy()
-    sensor = make_sensor(fov_start_angle=0.0, fov_end_angle=90.0)
+    sensor = make_sensor(fov_start_deg=0.0, fov_end_deg=90.0)
     platform = platform_factory("Blue_1", heading=(1.0, 0.0))  # facing +x
     target_behind = platform_factory("Red_1", team="Red", x=-10.0)  # bearing 180 deg
 
@@ -79,7 +79,7 @@ def test_target_outside_fov_is_never_detected(platform_factory, fake_random_gen)
 def test_fov_wraparound_across_0_degrees(platform_factory, fake_random_gen):
     strategy = GenericSensorDetectionStrategy()
     # FOV wraps through 0: 350 -> 10 degrees.
-    sensor = make_sensor(fov_start_angle=350.0, fov_end_angle=10.0)
+    sensor = make_sensor(fov_start_deg=350.0, fov_end_deg=10.0)
     platform = platform_factory("Blue_1", heading=(1.0, 0.0))
     # Target at ~5 degrees relative bearing (inside the wrapped FOV).
     target_in_fov = platform_factory("Red_1", team="Red", x=10.0, y=1.0)
@@ -137,7 +137,7 @@ def test_pod_is_zero_when_sensor_has_no_table(platform_factory, fake_random_gen)
 
 def test_k_of_n_triggers_once_threshold_reached(platform_factory, fake_random_gen):
     strategy = GenericSensorDetectionStrategy()
-    sensor = make_sensor(k=2, n=3, x_values=[0.0], pod=[1.0])
+    sensor = make_sensor(k=2, n=3, x_values=[100.0], pod=[1.0])
     platform = platform_factory("Blue_1")
     target = platform_factory("Red_1", team="Red", x=10.0)
 
@@ -162,7 +162,7 @@ def test_k_of_n_triggers_once_threshold_reached(platform_factory, fake_random_ge
 
 def test_k_of_n_not_triggered_below_threshold(platform_factory, fake_random_gen):
     strategy = GenericSensorDetectionStrategy()
-    sensor = make_sensor(k=3, n=3, x_values=[0.0], pod=[1.0])
+    sensor = make_sensor(k=3, n=3, x_values=[100.0], pod=[1.0])
     platform = platform_factory("Blue_1")
     target = platform_factory("Red_1", team="Red", x=10.0)
 
@@ -188,7 +188,7 @@ def test_evaluates_every_target_exhaustively_in_one_call(
 ):
     """A detection on one target must not prevent evaluating the remaining targets."""
     strategy = GenericSensorDetectionStrategy()
-    sensor = make_sensor(k=1, n=1, fov_start_angle=0.0, fov_end_angle=90.0)
+    sensor = make_sensor(k=1, n=1, fov_start_deg=0.0, fov_end_deg=90.0)
     platform = platform_factory("Blue_1", heading=(1.0, 0.0))
     target_hit = platform_factory("Red_1", team="Red", x=10.0)  # in FOV -> detected
     target_miss = platform_factory(

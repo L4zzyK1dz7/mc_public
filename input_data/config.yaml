@@ -1,36 +1,29 @@
 platforms:
 - display_name: Platform 1
   movement_type:
-    height: 100000.0
-    initial_position_generated: false
-    length: 100000.0
-    side_to_go: null
-    start_x_pos: 0.0
-    start_y_pos: 0.0
-    type: barrier_patrol
-  neutralised_platform_behaviour: Stop
+    type: random_walk
+  neutralised_platform_behaviour: stop
   platform_config_folder: Platform 1
-  sensors: []
-  speed_mps: 10.0
+  sensors:
+  - generic
+  speed_mps: 2.777777778
   team: Blue
 - display_name: Platform 2
   movement_type:
-    end_condition: cross_world
-    start_distance_m: 10000.0
-    type: intruder_search
-  neutralised_platform_behaviour: Stop
+    type: random_walk
+  neutralised_platform_behaviour: stop
   platform_config_folder: Platform 2
   sensors: []
-  speed_mps: 10.0
+  speed_mps: 0.0
   team: Red
 simulation:
   detection_end_condition: initial_detection
-  replications: 1
-  seeds_file: true
-  time_limit_sec: 36000.0
+  replications: 1000
+  seeds_file: False
+  time_limit_sec: 18000.0
   timestep_sec: 1.0
 world:
-  height: 100000.0
-  length: 100000.0
+  height: 10000.0
+  length: 10000.0
   origin_x: 0.0
   origin_y: 0.0

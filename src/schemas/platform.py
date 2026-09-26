@@ -55,17 +55,17 @@ class PlatformConfig(BaseModel):
 
     platform_config_folder: str
     display_name: str = Field(..., description="The display name of the platform.")
-    team: Union[Team, str] = Field(
+    team: Union[Team, Literal["Blue", "Red"]] = Field(
         ..., description="The team of the platform (Blue or Red)."
     )
     speed_mps: float = Field(
-        ..., description="The speed of the platform in meters per second."
+        ..., ge=0.0, description="The speed of the platform in meters per second."
     )
     movement_type: MovementType = Field(
         ...,
         description="The movement type of the platform, which can be one of several predefined movement configurations.",
     )
-    neutralised_platform_behaviour: str = Field(
+    neutralised_platform_behaviour: Literal["stop", "continue"] = Field(
         default=neutralised_platform_behaviour_options,
         description="The behaviour of the platform when neutralised, either 'stop' or 'continue'.",
     )

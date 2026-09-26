@@ -2,11 +2,16 @@
 Per-replication runtime state for each movement type, kept separate from the
 static movement config in src/schemas/movement.py so config objects loaded
 once from YAML can be safely reused, unmutated, across every replication.
+
+Also defines the MovementStrategy ABC and concrete strategy classes (Strategy
+pattern), plus a MOVEMENT_REGISTRY dictionary that replaces if/elif dispatch
+chains with a registry lookup (Open/Closed Principle).
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal, Optional, Union
+from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING, Literal, Optional, Type, Union
 
 from pydantic import BaseModel, Field
 
@@ -23,6 +28,11 @@ if TYPE_CHECKING:
 
     from src.schemas.platform import MovementType
     from src.schemas.simulation import ConfigData
+
+
+# ==========================
+# PER-REPLICATION STATE MODELS
+# ==========================
 
 
 class RandomWalkState(BaseModel):
@@ -83,19 +93,162 @@ MovementState = Union[
 ]
 
 
+# ==========================
+# MOVEMENT STRATEGY (ABC + CONCRETE CLASSES)
+# ==========================
+
+
+class MovementStrategy(ABC):
+    """
+    Abstract base class for movement strategies (Strategy pattern).
+
+    Each concrete subclass encapsulates the waypoint-generation algorithm for
+    a single movement config type plus its matching per-replication state.
+    Adding a new movement type only requires a new subclass + a registry entry;
+    nothing else in the codebase needs to change (Open/Closed Principle).
+    """
+
+    @abstractmethod
+    def get_next_waypoint(
+        self,
+        config: MovementType,
+        state: MovementState,
+        config_data: ConfigData,
+        random_gen: np.random.Generator,
+    ) -> Waypoint:
+        """
+        Return the next waypoint for this movement algorithm.
+
+        Args:
+            config: The static movement configuration (loaded from YAML, never mutated).
+            state: Per-replication mutable runtime state for this movement type.
+            config_data: Global simulation configuration (world bounds, timestep, etc.).
+            random_gen: Seeded random generator for stochastic behaviour.
+
+        Returns:
+            Waypoint: The next target position for the platform.
+        """
+        raise NotImplementedError
+
+    @staticmethod
+    @abstractmethod
+    def create_state() -> MovementState:
+        """Return a fresh, zeroed per-replication runtime state for this strategy."""
+        raise NotImplementedError
+
+
+class RandomWalkStrategy(MovementStrategy):
+    """Movement strategy for RandomWalkMovement."""
+
+    def get_next_waypoint(
+        self,
+        config: RandomWalkMovement,
+        state: RandomWalkState,
+        config_data: ConfigData,
+        random_gen: np.random.Generator,
+    ) -> Waypoint:
+        return _random_walk_next_position(config, state, config_data, random_gen)
+
+    @staticmethod
+    def create_state() -> RandomWalkState:
+        return RandomWalkState()
+
+
+class IntruderSearchStrategy(MovementStrategy):
+    """Movement strategy for IntruderSearchMovement."""
+
+    def get_next_waypoint(
+        self,
+        config: IntruderSearchMovement,
+        state: IntruderSearchState,
+        config_data: ConfigData,
+        random_gen: np.random.Generator,
+    ) -> Waypoint:
+        return _intruder_search_next_position(config, state, config_data, random_gen)
+
+    @staticmethod
+    def create_state() -> IntruderSearchState:
+        return IntruderSearchState()
+
+
+class BarrierPatrollerStrategy(MovementStrategy):
+    """Movement strategy for BarrierPatrollerMovement."""
+
+    def get_next_waypoint(
+        self,
+        config: BarrierPatrollerMovement,
+        state: BarrierPatrollerState,
+        config_data: ConfigData,
+        random_gen: np.random.Generator,
+    ) -> Waypoint:
+        return _barrier_patroller_next_position(config, state, config_data, random_gen)
+
+    @staticmethod
+    def create_state() -> BarrierPatrollerState:
+        return BarrierPatrollerState()
+
+
+class UserDefinedWaypointsStrategy(MovementStrategy):
+    """Movement strategy for UserDefinedWaypointsMovement."""
+
+    def get_next_waypoint(
+        self,
+        config: UserDefinedWaypointsMovement,
+        state: UserDefinedWaypointsState,
+        config_data: ConfigData,
+        random_gen: np.random.Generator,
+    ) -> Waypoint:
+        return _user_defined_waypoints_next_position(
+            config, state, config_data, random_gen
+        )
+
+    @staticmethod
+    def create_state() -> UserDefinedWaypointsState:
+        return UserDefinedWaypointsState()
+
+
+# ==========================
+# MOVEMENT REGISTRY
+# ==========================
+
+# Registry pattern: maps movement config `type` string -> strategy class.
+# Adding a new movement type only requires registering it here.
+MOVEMENT_REGISTRY: dict[str, Type[MovementStrategy]] = {
+    "random_walk": RandomWalkStrategy,
+    "intruder_search": IntruderSearchStrategy,
+    "barrier_patrol": BarrierPatrollerStrategy,
+    "user_defined_waypoints": UserDefinedWaypointsStrategy,
+}
+
+
+def create_movement_strategy(movement_type: MovementType) -> MovementStrategy:
+    """
+    Instantiate the MovementStrategy for the given config via the registry.
+
+    This replaces the if/elif isinstance chain with a O(1) dict lookup.
+    Raises KeyError if the movement type string is not registered.
+    """
+    strategy_class = MOVEMENT_REGISTRY[movement_type.type]
+    return strategy_class()
+
+
 def create_movement_state(movement_type: MovementType) -> MovementState:
     """
     Build a fresh runtime state instance matching the given movement config, so
     per-replication state (e.g. current waypoint index, spawn flags) never
     leaks between replications that reuse the same movement config object.
+
+    Delegates to the registered strategy's create_state factory so the
+    mapping is defined in one place (MOVEMENT_REGISTRY).
     """
-    if isinstance(movement_type, IntruderSearchMovement):
-        return IntruderSearchState()
-    if isinstance(movement_type, BarrierPatrollerMovement):
-        return BarrierPatrollerState()
-    if isinstance(movement_type, UserDefinedWaypointsMovement):
-        return UserDefinedWaypointsState()
-    return RandomWalkState()
+    strategy_class = MOVEMENT_REGISTRY[movement_type.type]
+    return strategy_class.create_state()
+
+
+# ==========================
+# PRIVATE POSITION CALCULATORS
+# (Called by the concrete strategy classes above)
+# ==========================
 
 
 def _random_walk_next_position(
@@ -110,7 +263,9 @@ def _random_walk_next_position(
     Args:
         movement_type (RandomWalkMovement): The static movement config, unused here.
         state (RandomWalkState): Unused, kept for a uniform signature across movement types.
-        config_data (ConfigData): The configuration data for the simulation based on user input. This provides information about the environment in which the platform is operating.
+        config_data (ConfigData): The configuration data for the simulation based on user
+            input. This provides information about the environment in which the platform
+            is operating.
 
     Returns:
         Waypoint: The next position for the platform.
@@ -134,11 +289,13 @@ def _intruder_search_next_position(
     random_gen: np.random.Generator,
 ) -> Waypoint:
     """
-    Intruder starts on or just outside the world (determined by start_distance_m)
-    The inital position x is random along the length of the world. The y position is determined by the height of the world plus start_distance_m from the top of the world.
+    Intruder starts on or just outside the world (determined by start_distance_m).
+    The initial position x is random along the length of the world. The y position is
+    determined by the height of the world plus start_distance_m from the top of the world.
     The waypoint represents the intruders next position positioned just outside the world.
     The intruder moves vertically downwards from its starting position to the waypoint.
-    If the intruder is not detected then the end condition stop at either crossing the world or crossing barrier
+    If the intruder is not detected then the end condition stops at either crossing the
+    world or crossing barrier.
 
     args:
         movement_type (IntruderSearchMovement): The static movement config.
@@ -183,11 +340,14 @@ def _barrier_patroller_next_position(
     random_gen: np.random.Generator,
 ) -> Waypoint:
     """
-    The barrier is positioned based on its starting X and Y positions, length, and height inside the world
+    The barrier is positioned based on its starting X and Y positions, length, and height
+    inside the world.
 
-    The intial position is random placed within the barrier starting X and Y positions and constrained by the barrier's length and height.
-    The next position will determine by a 5050 chance of either left of the barrier or right of the barrier
-    If the barrier reaches one of the sides, the next position will be on the opposite side.
+    The initial position is randomly placed within the barrier starting X and Y positions
+    and constrained by the barrier's length and height.
+    The next position will be determined by a 50/50 chance of either left or right of the
+    barrier. If the barrier reaches one of the sides, the next position will be on the
+    opposite side.
 
     args:
         movement_type (BarrierPatrollerMovement): The static movement config.
@@ -197,7 +357,8 @@ def _barrier_patroller_next_position(
     # Generate initial position
     if not state.initial_position_generated:
         state.initial_position_generated = True
-        # Generate the initial position within the barrier's starting X and Y positions and constrained by the barrier's length and height
+        # Generate the initial position within the barrier's starting X and Y positions
+        # and constrained by the barrier's length and height
         initial_x = random_gen.uniform(
             movement_type.start_x_pos, movement_type.start_x_pos + movement_type.length
         )
@@ -238,8 +399,10 @@ def _user_defined_waypoints_next_position(
     random_gen: np.random.Generator,
 ) -> Waypoint:
     """
-    Waypoints is a list of Waypoint, the platform's initial position will be the first Waypoint in the list and will move along the subsequent waypoints.
-    The cycle repeats after reaching the last waypoint, and the platform will start on the first waypoint again to form a pattern.
+    Waypoints is a list of Waypoint, the platform's initial position will be the first
+    Waypoint in the list and will move along the subsequent waypoints.
+    The cycle repeats after reaching the last waypoint, and the platform will start on
+    the first waypoint again to form a pattern.
 
     args:
         movement_type (UserDefinedWaypointsMovement): The static movement config.
@@ -249,7 +412,8 @@ def _user_defined_waypoints_next_position(
     # If this is the first call, return the initial waypoint without updating the index.
     waypoint = movement_type.waypoints[state.current_index]
 
-    # Update the waypoint index to the next waypoint in the list, cycling back to the first waypoint if necessary.
+    # Update the waypoint index to the next waypoint in the list, cycling back to the
+    # first waypoint if necessary.
     state.current_index = (state.current_index + 1) % len(movement_type.waypoints)
 
     return waypoint
@@ -261,34 +425,6 @@ def get_next_position(
     config_data: ConfigData,
     random_gen: np.random.Generator,
 ) -> Waypoint:
-    """
-    Dispatch to the movement-specific next-position calculation, pairing each
-    movement config with its matching runtime state (built via create_movement_state).
-    """
-    if isinstance(movement_type, IntruderSearchMovement) and isinstance(
-        state, IntruderSearchState
-    ):
-        return _intruder_search_next_position(
-            movement_type, state, config_data, random_gen
-        )
-    if isinstance(movement_type, BarrierPatrollerMovement) and isinstance(
-        state, BarrierPatrollerState
-    ):
-        return _barrier_patroller_next_position(
-            movement_type, state, config_data, random_gen
-        )
-    if isinstance(movement_type, UserDefinedWaypointsMovement) and isinstance(
-        state, UserDefinedWaypointsState
-    ):
-        return _user_defined_waypoints_next_position(
-            movement_type, state, config_data, random_gen
-        )
-    if isinstance(movement_type, RandomWalkMovement) and isinstance(
-        state, RandomWalkState
-    ):
-        return _random_walk_next_position(movement_type, state, config_data, random_gen)
-
-    raise TypeError(
-        f"Movement type {type(movement_type).__name__} is not paired with a matching "
-        f"state {type(state).__name__}; build state via create_movement_state()."
-    )
+    """Convenience functional dispatch using MovementStrategy."""
+    strategy = create_movement_strategy(movement_type)
+    return strategy.get_next_waypoint(movement_type, state, config_data, random_gen)

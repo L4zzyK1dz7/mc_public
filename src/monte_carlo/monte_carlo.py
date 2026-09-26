@@ -26,7 +26,6 @@ from src.monte_carlo.output.aggregate_results import aggregate_and_output_result
 from src.monte_carlo.output.file_utils import get_next_run_folder
 from src.monte_carlo.output.outcome_detection_manager import OutcomeDetectionManager
 from src.monte_carlo.output.outcome_position_manager import OutcomePositionManager
-from src.monte_carlo.states.movement_manager import MovementManager
 from src.monte_carlo.states.platform_states import initialise_platform_states
 from src.schemas.output import SimulationResult, SimulationResults
 
@@ -48,7 +47,6 @@ logger = logging.getLogger(__name__)
 
 def _execute_single_replication(
     config_data: ConfigData,
-    movement_manager: MovementManager,
     outcome_manager: OutcomePositionManager,
     detection_manager: OutcomeDetectionManager,
     seed: Optional[int] = None,
@@ -57,10 +55,9 @@ def _execute_single_replication(
     Run a single replication of the Monte Carlo simulation.
 
     Args:
-        config_data: ConfigData,
-        movement_manager: MovementManager,
-        outcome_manager: OutcomePositionManager,
-        detection_manager: OutcomeDetectionManager,
+        config_data: Simulation configuration data.
+        outcome_manager: Manager to record positional outcomes.
+        detection_manager: Manager to record detection outcomes.
         seed: Optional seed for reproducibility.
 
     Returns:
@@ -70,15 +67,14 @@ def _execute_single_replication(
     # Set the random seed if provided
     random_gen = np.random.default_rng(seed)
 
-    # Initialise platform states and  MovementManager
+    # Initialise platform states for this replication
     platform_states: list[PlatformState] = initialise_platform_states(
-        config_data, random_gen, movement_manager
+        config_data, random_gen
     )
     outcome_manager.record_initial_positions(platform_states)
     detection_manager.seed_pairs(platform_states)
 
-    # Calculate nummber of total timesteps
-    movement_manager.current_simulation_time = 0.0
+    # Calculate number of total timesteps
     max_steps = int(
         round(
             config_data.simulation.time_limit_sec / config_data.simulation.timestep_sec
@@ -93,17 +89,10 @@ def _execute_single_replication(
     for step in range(max_steps):
         sim_time_sec += config_data.simulation.timestep_sec
 
-        # Update MovementManager with the current simulation time
-        movement_manager.current_simulation_time += config_data.simulation.timestep_sec
-
-        # Move Platforms
-        waypoint_platforms = movement_manager.move_platforms(
-            platform_states, sim_time_sec, config_data, random_gen
-        )
-
-        # Record platform positional snapshot for all platforms that generated waypoints
-        for platform in waypoint_platforms:
-            outcome_manager.record_waypoint_generated(platform, sim_time_sec)
+        # Move platforms and record snapshot for any that generated a new waypoint
+        for platform in platform_states:
+            if platform.advance_step(sim_time_sec, config_data, random_gen):
+                outcome_manager.record_waypoint_generated(platform, sim_time_sec)
 
         # Perform detection based on the current platform states. Every platform/sensor/
         # target combination is evaluated exhaustively, so this may report more than one
@@ -224,10 +213,8 @@ def _execute_monte_carlo(
         outcome_manager = OutcomePositionManager(replication_id)
         detection_manager = OutcomeDetectionManager(replication_id)
 
-        movement_manager = MovementManager()  # initialise the movement manager
-
         replication_result = _execute_single_replication(
-            config_data, movement_manager, outcome_manager, detection_manager, seed
+            config_data, outcome_manager, detection_manager, seed
         )
         # Process the replication result as needed
         logger.info("Finished replication %d", replication_id)

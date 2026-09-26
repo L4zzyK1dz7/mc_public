@@ -27,3 +27,8 @@ class SensorRuntimeState:
             maxlen: Maximum length of the k-of-n hit history deque.
         """
         return self.hit_windows.setdefault(target_id, deque(maxlen=maxlen))
+
+    def reset(self) -> None:
+        """Reset the sensor runtime state to baseline conditions."""
+        self.next_eval_time_sec = 0.0
+        self.hit_windows.clear()

@@ -1,0 +1,70 @@
+﻿============================= test session starts =============================
+platform win32 -- Python 3.9.22, pytest-8.4.2, pluggy-1.6.0
+rootdir: C:\Users\ISA06016784\Desktop\Uni_Projects\work projects\monte_carlo
+configfile: pyproject.toml
+plugins: anyio-4.12.1, cov-7.1.0
+collected 73 items
+
+tests\monte_carlo\detection_pipeline\strategies\test_generic.py ........ [ 10%]
+.                                                                        [ 12%]
+tests\monte_carlo\detection_pipeline\strategies\test_registry.py ..      [ 15%]
+tests\monte_carlo\detection_pipeline\test_pairs.py ...                   [ 19%]
+tests\monte_carlo\detection_pipeline\test_pipeline.py ....               [ 24%]
+tests\monte_carlo\detection_pipeline\test_sensor_state.py ...            [ 28%]
+tests\monte_carlo\test_core_state.py .........                           [ 41%]
+tests\monte_carlo\test_end_conditions.py ......                          [ 49%]
+tests\monte_carlo\test_integration.py ......                             [ 57%]
+tests\monte_carlo\test_movement_strategies.py ......                     [ 65%]
+tests\monte_carlo\test_outcome_position_manager.py ..                    [ 68%]
+tests\monte_carlo\test_outputs\test_output_management.py ....            [ 73%]
+tests\monte_carlo\test_outputs\test_results.py .                         [ 75%]
+tests\monte_carlo\test_platform_movement.py ..                           [ 78%]
+tests\monte_carlo\test_platform_schema.py .                              [ 79%]
+tests\monte_carlo\test_schemas.py ...............                        [100%]
+
+============================== warnings summary ===============================
+tests/monte_carlo/test_integration.py::test_int_05_aggregation_stability_50_replications
+tests/monte_carlo/test_integration.py::test_int_06_system_level_simulation_baseline
+tests/monte_carlo/test_outputs/test_output_management.py::test_out_05_statistical_metric_calculations
+  C:\Users\ISA06016784\Desktop\Uni_Projects\work projects\monte_carlo\src\monte_carlo\output\summary_stats.py:95: FutureWarning: Downcasting object dtype arrays on .fillna, .ffill, .bfill is deprecated and will change in a future version. Call result.infer_objects(copy=False) instead. To opt-in to the future behavior, set `pd.set_option('future.no_silent_downcasting', True)`
+    per_replication["detection_outcome"] = per_replication["detection_outcome"].fillna(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=============================== tests coverage ================================
+_______________ coverage: platform win32, python 3.9.22-final-0 _______________
+
+Name                                                        Stmts   Miss  Cover   Missing
+-----------------------------------------------------------------------------------------
+src\monte_carlo\configuration\load_configuration.py            44     10    77%   49-50, 70-72, 106, 110-111, 117, 121
+src\monte_carlo\configuration\sensor_loader.py                 59     46    22%   24-63, 68-74, 94-112
+src\monte_carlo\detection_pipeline\events.py                    8      0   100%
+src\monte_carlo\detection_pipeline\pairs.py                    11      0   100%
+src\monte_carlo\detection_pipeline\pipeline.py                 13      0   100%
+src\monte_carlo\detection_pipeline\sensor_state.py             13      0   100%
+src\monte_carlo\detection_pipeline\strategies\__init__.py       4      0   100%
+src\monte_carlo\detection_pipeline\strategies\base.py           7      1    86%   50
+src\monte_carlo\detection_pipeline\strategies\generic.py       43      0   100%
+src\monte_carlo\detection_pipeline\strategies\registry.py       7      0   100%
+src\monte_carlo\end_conditions\__init__.py                      3      0   100%
+src\monte_carlo\end_conditions\facts.py                        19      1    95%   23
+src\monte_carlo\end_conditions\models.py                       18      0   100%
+src\monte_carlo\end_conditions\resolver.py                     15      0   100%
+src\monte_carlo\monte_carlo.py                                104     15    86%   95, 120-126, 250-251, 259-267, 286
+src\monte_carlo\output\aggregate_results.py                    24      1    96%   37
+src\monte_carlo\output\file_utils.py                           19      0   100%
+src\monte_carlo\output\outcome_detection_manager.py            24      0   100%
+src\monte_carlo\output\outcome_position_manager.py             29      1    97%   63
+src\monte_carlo\output\raw_positions.py                        21      1    95%   75
+src\monte_carlo\output\summary_stats.py                        70      6    91%   32, 85, 140, 179, 211, 222
+src\monte_carlo\states\movement_state.py                       96      6    94%   131, 137, 188, 331, 429-430
+src\monte_carlo\states\platform_states.py                     110      9    92%   49, 61, 130, 140, 177, 276-297
+src\schemas\error_handling.py                                  16     14    12%   19-54
+src\schemas\movement.py                                        26      0   100%
+src\schemas\output.py                                          36      0   100%
+src\schemas\platform.py                                        19      0   100%
+src\schemas\sensor.py                                          39      7    82%   99-108
+src\schemas\simulation.py                                      22      0   100%
+-----------------------------------------------------------------------------------------
+TOTAL                                                         919    118    87%
+Required test coverage of 80% reached. Total coverage: 87.16%
+======================= 73 passed, 3 warnings in 1.64s ========================

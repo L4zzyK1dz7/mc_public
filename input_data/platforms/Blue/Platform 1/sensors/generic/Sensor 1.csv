@@ -1,0 +1,11 @@
+# display_name: Sensor 1
+# interval_time_sec: 1.0
+# type: generic
+# k: 1
+# n: 1
+# fov_start_deg: 0.0
+# fov_end_deg: 360.0
+
+range_m,pod
+0.0,1.0
+1000.0,1.0

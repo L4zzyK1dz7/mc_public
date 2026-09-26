@@ -210,7 +210,7 @@ def render_platform_creation() -> bool:
         "team": platform_team,
         "movement_type": platform_movement_type,
         "movement_config": platform_movement_config,
-        "neutralised_behaviour": platform_neutralised_behaviour,
+        "neutralised_behaviour": platform_neutralised_behaviour.lower(),
     }
 
     return is_platform_draft_ready()

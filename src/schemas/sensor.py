@@ -1,6 +1,6 @@
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from src.schemas.error_handling import human_readable_errors
 
@@ -31,6 +31,19 @@ class SensorConfig(BaseModel):
     type: str = Field(..., description="The type of the sensor.")
     k: int = Field(gt=0, description="An integer parameter associated with the sensor.")
     n: int = Field(gt=0, description="An integer parameter associated with the sensor.")
+
+    @model_validator(mode="after")
+    def validate_sensor_parameters(self) -> "SensorConfig":
+        if self.k > self.n:
+            raise ValueError(f"k ({self.k}) must be less than or equal to n ({self.n})")
+        if len(self.x_values) != len(self.pod):
+            raise ValueError(
+                f"x_values and pod must have the same length (got {len(self.x_values)} and {len(self.pod)})"
+            )
+        for p in self.pod:
+            if not (0.0 <= p <= 1.0):
+                raise ValueError(f"Probability of detection must be between 0.0 and 1.0, got {p}")
+        return self
 
 
 class GenericSensorConfig(SensorConfig):

@@ -18,8 +18,8 @@ class World(BaseModel):
     origin_y: float = Field(
         default=0, description="The y-coordinate of the origin of the world."
     )
-    length: float = Field(..., description="The length of the world.")
-    height: float = Field(..., description="The height of the world.")
+    length: float = Field(..., gt=0, description="The length of the world.")
+    height: float = Field(..., gt=0, description="The height of the world.")
 
 
 class SimulationConfig(BaseModel):
@@ -35,13 +35,13 @@ class SimulationConfig(BaseModel):
     """
 
     replications: int = Field(
-        ..., description="The number of replications for the simulation."
+        ..., gt=0, description="The number of replications for the simulation."
     )
     time_limit_sec: float = Field(
-        ..., description="The time limit for the simulation in seconds."
+        ..., gt=0, description="The time limit for the simulation in seconds."
     )
     timestep_sec: float = Field(
-        ..., description="The time step for the simulation world in seconds."
+        ..., gt=0, description="The time step for the simulation world in seconds."
     )
     seeds_file: bool = Field(
         ..., description="Indicates whether a seeds file is used for the simulation."

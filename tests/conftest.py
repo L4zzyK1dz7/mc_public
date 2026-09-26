@@ -6,9 +6,9 @@ from typing import Iterable, Optional
 
 import pytest
 
-from src.monte_carlo.states.movement_manager import WpProperties
-from src.monte_carlo.states.platform_states import PlatformState
-from src.schemas.movement import Waypoint
+from src.monte_carlo.states.platform_states import PlatformState, WpProperties
+from src.schemas.movement import RandomWalkMovement, Waypoint
+from src.schemas.platform import PlatformConfig
 
 
 class FakeRandomGen:
@@ -39,14 +39,20 @@ def make_platform_state(
     sensors: Optional[list] = None,
 ) -> PlatformState:
     """Build a minimal PlatformState for unit tests that don't need real movement."""
-    return PlatformState(
-        id=id,
+    blueprint = PlatformConfig.model_construct(
+        platform_config_folder=id,
         display_name=id,
         team=team,
         speed_mps=0.0,
+        movement_type=RandomWalkMovement(),
+        sensors=sensors or [],
+    )
+    return PlatformState(
+        id=id,
+        blueprint=blueprint,
         pos=Waypoint(x=x, y=y),
-        movement_type=None,
-        movement_state=None,
+        movement_runtime=None,  # type: ignore[arg-type]  # not needed in detection-only tests
+        movement_state=None,    # type: ignore[arg-type]  # not needed in detection-only tests
         wp_properties=WpProperties(
             pos=Waypoint(x=x, y=y),
             arrival_time=0.0,
@@ -55,7 +61,6 @@ def make_platform_state(
             total_duration=0.0,
             step_distance=0.0,
         ),
-        sensors=sensors or [],
     )
 
 
