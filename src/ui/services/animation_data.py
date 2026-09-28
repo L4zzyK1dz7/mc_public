@@ -62,8 +62,12 @@ def load_sensors(config_data: ConfigData) -> List[SensorDefinition]:
                 {
                     "platform_id": platform_id,
                     "name": sensor.display_name,
-                    "fov_start_deg": getattr(sensor, "fov_start_angle", 0.0),
-                    "fov_end_deg": getattr(sensor, "fov_end_angle", 360.0),
+                    "fov_start_deg": getattr(
+                        sensor, "fov_start_deg", getattr(sensor, "fov_start_angle", 0.0)
+                    ),
+                    "fov_end_deg": getattr(
+                        sensor, "fov_end_deg", getattr(sensor, "fov_end_angle", 360.0)
+                    ),
                     "range_km": (
                         max(sensor.x_values) / 1000.0 if sensor.x_values else 0.0
                     ),
