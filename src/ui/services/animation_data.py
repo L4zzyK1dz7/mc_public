@@ -100,6 +100,8 @@ def load_positions(csv_path: Path) -> pd.DataFrame:
     positions[list(numeric_columns)] = positions[list(numeric_columns)].apply(
         pd.to_numeric, errors="raise"
     )
+    if "heading" in positions.columns:
+        positions["heading"] = pd.to_numeric(positions["heading"], errors="coerce")
 
     positions["timestamp_sec"] = positions["timestamp_minutes"] * 60.0
     return positions.sort_values(
@@ -163,6 +165,11 @@ def build_platforms(
                     "detection_distance_km": (
                         float(row.detection_distance_km)
                         if pd.notna(row.detection_distance_km)
+                        else None
+                    ),
+                    "heading": (
+                        float(row.heading)
+                        if hasattr(row, "heading") and pd.notna(row.heading)
                         else None
                     ),
                 }

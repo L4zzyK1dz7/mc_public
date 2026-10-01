@@ -7,6 +7,7 @@ it can be reused by both a Streamlit page and a plain CLI script.
 
 from __future__ import annotations
 
+import math
 from typing import Dict, List, Optional, Tuple, TypedDict, cast
 
 import numpy as np
@@ -21,7 +22,7 @@ class SimulationTiming(TypedDict):
     world_timestep_sec: float
 
 
-class PlatformPosition(TypedDict):
+class PlatformPosition(TypedDict, total=False):
     platform_id: str
     team: str
     timestamp_sec: float
@@ -33,6 +34,7 @@ class PlatformPosition(TypedDict):
     target_platform_id: Optional[str]
     detection_sensor_name: Optional[str]
     detection_distance_km: Optional[float]
+    heading: Optional[float]
 
 
 class DetectionEvent(TypedDict):
@@ -57,15 +59,39 @@ class PlatformAnimationData(TypedDict):
     detections: List[DetectionEvent]
 
 
+def _platform_heading_deg(position: PlatformPosition) -> float:
+    """Return the heading in degrees for a platform position, falling back to waypoint direction."""
+    heading = position.get("heading")
+    if heading is not None and not (isinstance(heading, float) and np.isnan(heading)):
+        return float(heading)
+    pos_x = position.get("pos_x_km", 0.0)
+    pos_y = position.get("pos_y_km", 0.0)
+    wp_x = position.get("waypoint_x_km", pos_x)
+    wp_y = position.get("waypoint_y_km", pos_y)
+    dx = wp_x - pos_x
+    dy = wp_y - pos_y
+    if math.hypot(dx, dy) > 1e-6:
+        return math.degrees(math.atan2(dy, dx)) % 360.0
+    return 0.0
+
+
 def _sector_points(
     centre_x: float,
     centre_y: float,
     start_deg: float,
     end_deg: float,
     radius_km: float,
+    heading_deg: float = 0.0,
 ) -> Tuple[List[float], List[float]]:
-    end_for_arc = end_deg if end_deg >= start_deg else end_deg + 360.0
-    angles = np.deg2rad(np.linspace(start_deg, end_for_arc, 48))
+    diff = end_deg - start_deg
+    if diff == 360.0 or (start_deg == 0.0 and end_deg == 360.0):
+        span = 360.0
+    else:
+        span = diff % 360.0
+
+    rotated_start = heading_deg + start_deg
+    rotated_end = rotated_start + span
+    angles = np.deg2rad(np.linspace(rotated_start, rotated_end, 48))
     arc_x = centre_x + radius_km * np.cos(angles)
     arc_y = centre_y + radius_km * np.sin(angles)
     return (
@@ -86,12 +112,25 @@ def _position_at_time(
     for left, right in zip(positions, positions[1:]):
         if left["timestamp_sec"] <= timestamp_sec <= right["timestamp_sec"]:
             duration = right["timestamp_sec"] - left["timestamp_sec"]
-            fraction = (timestamp_sec - left["timestamp_sec"]) / duration
+            fraction = (
+                (timestamp_sec - left["timestamp_sec"]) / duration
+                if duration > 0.0
+                else 0.0
+            )
             interpolated = dict(left)
             for field in ("pos_x_km", "pos_y_km"):
                 interpolated[field] = left[field] + fraction * (
                     right[field] - left[field]
                 )
+            if left.get("heading") is not None and not (
+                isinstance(left["heading"], float) and np.isnan(left["heading"])
+            ):
+                interpolated["heading"] = left["heading"]
+            else:
+                dx = right["pos_x_km"] - left["pos_x_km"]
+                dy = right["pos_y_km"] - left["pos_y_km"]
+                if math.hypot(dx, dy) > 1e-6:
+                    interpolated["heading"] = math.degrees(math.atan2(dy, dx)) % 360.0
             return cast(PlatformPosition, interpolated)
     return positions[-1]
 
@@ -180,6 +219,7 @@ def build_animation(
                 marker={"color": color, "size": 12},
             )
         )
+        initial_heading = _platform_heading_deg(initial)
         for sensor in platform["sensors"]:
             sector_x, sector_y = _sector_points(
                 initial["pos_x_km"],
@@ -187,6 +227,7 @@ def build_animation(
                 sensor["fov_start_deg"],
                 sensor["fov_end_deg"],
                 sensor["range_km"],
+                heading_deg=initial_heading,
             )
             trace_specs.append(("sensor", platform_id, sensor))
             figure.add_trace(
@@ -252,6 +293,7 @@ def build_animation(
                     sensor["fov_start_deg"],
                     sensor["fov_end_deg"],
                     sensor["range_km"],
+                    heading_deg=_platform_heading_deg(current),
                 )
                 frame_data.append(go.Scatter(x=sector_x, y=sector_y))
             else:
