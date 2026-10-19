@@ -15,7 +15,7 @@ for reporting and analysis.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Sequence
 
 import pandas as pd
 
@@ -94,7 +94,7 @@ def generate_table_1(
     per_replication = universe.merge(representative, on=group_cols, how="left")
     per_replication["detection_outcome"] = per_replication["detection_outcome"].fillna(
         False
-    )
+    ).astype(bool)
 
     grouped = (
         per_replication.groupby(["detecting_platform_id", "target_platform_id"])
@@ -189,10 +189,76 @@ def generate_table_3(
     return probability[columns]
 
 
+CANONICAL_END_CONDITIONS: list[str] = [
+    "time_limit",
+    "target_escaped",
+    "barrier_crossed",
+    "world_crossed",
+    "detection",
+    "counter_detection",
+    "blue_team_detection",
+    "red_team_detection",
+]
+
+
 def generate_table_4(
+    end_conditions: Optional[Sequence[str]] = None,
     detection_outcomes: Optional[list[DetectionOutcomeEvent]] = None,
 ) -> pd.DataFrame:
-    """Per-replication detection outcome for every (detecting_platform, sensor,
+    """Generate Table 4: End condition rates and counts across all replications.
+
+    Args:
+        end_conditions: List of end condition string identifiers for each replication.
+        detection_outcomes: Optional list of detection outcome events to fallback on if
+            end_conditions is not directly provided.
+
+    Returns:
+        DataFrame with columns: end_condition, count, rate
+    """
+    columns = ["end_condition", "count", "rate"]
+
+    conditions_list: list[str] = []
+    if end_conditions is not None:
+        conditions_list = [c for c in end_conditions if c]
+    elif detection_outcomes:
+        df = _build_detection_outcomes_df(detection_outcomes)
+        if (
+            not df.empty
+            and "replication_id" in df.columns
+            and "end_condition" in df.columns
+        ):
+            rep_end = df[["replication_id", "end_condition"]].dropna().drop_duplicates(
+                subset=["replication_id"]
+            )
+            conditions_list = rep_end["end_condition"].tolist()
+
+    total_replications = len(conditions_list)
+    counts = (
+        pd.Series(conditions_list).value_counts()
+        if total_replications > 0
+        else pd.Series(dtype="int64")
+    )
+
+    all_known_conditions = list(CANONICAL_END_CONDITIONS)
+    for cond in counts.index:
+        if cond not in all_known_conditions:
+            all_known_conditions.append(str(cond))
+
+    rows = []
+    for cond in all_known_conditions:
+        cnt = int(counts.get(cond, 0))
+        rate = float(cnt / total_replications) if total_replications > 0 else 0.0
+        rows.append({"end_condition": cond, "count": cnt, "rate": rate})
+
+    if not rows:
+        return pd.DataFrame({col: pd.Series(dtype="object") for col in columns})
+    return pd.DataFrame(rows)
+
+
+def generate_table_5(
+    detection_outcomes: Optional[list[DetectionOutcomeEvent]] = None,
+) -> pd.DataFrame:
+    """Generate Table 5: Per-replication detection outcome for every (detecting_platform, sensor,
     target_platform) combination - the raw log the other tables are aggregated from.
     """
     columns = [
@@ -216,8 +282,9 @@ def generate_table_4(
 def write_summary_stats_csv(
     detection_outcomes: list[DetectionOutcomeEvent],
     output_path: Optional[Path] = None,
+    end_conditions: Optional[Sequence[str]] = None,
 ) -> Path:
-
+    """Write all summary statistics tables to summary_stats.csv with section headers."""
     if output_path is None:
         output_path = Path("summary_stats.csv")
 
@@ -225,7 +292,10 @@ def write_summary_stats_csv(
     table1 = generate_table_1(detection_outcomes)
     table2 = generate_table_2(detection_outcomes)
     table3 = generate_table_3(detection_outcomes)
-    table4 = generate_table_4(detection_outcomes)
+    table4 = generate_table_4(
+        end_conditions=end_conditions, detection_outcomes=detection_outcomes
+    )
+    table5 = generate_table_5(detection_outcomes)
 
     # Write to file with section headers
     with open(output_path, "w", newline="", encoding="utf-8") as f:
@@ -245,7 +315,12 @@ def write_summary_stats_csv(
         f.write("\n")
 
         # Table 4
-        f.write("# 4. Replication-Level Detection Outcomes\n")
+        f.write("# 4. End Condition Rates Across Replications\n")
         table4.to_csv(f, index=False)
+        f.write("\n")
+
+        # Table 5
+        f.write("# 5. Replication-Level Detection Outcomes\n")
+        table5.to_csv(f, index=False)
 
     return output_path

@@ -1,6 +1,11 @@
+from __future__ import annotations
+
+from typing import Optional
+
 import pandas as pd
 import streamlit as st
 
+from src.monte_carlo.configuration.load_configuration import load_config_from_yaml
 from src.ui.plotting.detection_analytics import (
     build_detection_histogram,
     build_fleet_convergence_chart,
@@ -8,15 +13,24 @@ from src.ui.plotting.detection_analytics import (
     build_pairwise_convergence_chart,
 )
 from src.ui.plotting.platform_animation import build_animation
-from src.ui.services.animation_data import build_platforms, load_animation_inputs
+from src.ui.services.animation_data import (
+    build_display_name_map,
+    build_platforms,
+    compute_replication_end_sec,
+    load_animation_inputs,
+)
 from src.ui.services.results_data import (
+    apply_display_names,
     list_run_folders,
     load_raw_positions,
     load_summary_stats_tables,
 )
 
 
-def render_analytics_tab(tables: dict[str, pd.DataFrame]) -> None:
+def render_analytics_tab(
+    tables: dict[str, pd.DataFrame],
+    name_map: Optional[dict[str, str]] = None,
+) -> None:
     """Render Tier 1, 2, and 3 Monte Carlo detection analytics."""
     raw_outcomes = next(
         (df for title, df in tables.items() if "Replication-Level" in title), None
@@ -25,10 +39,18 @@ def render_analytics_tab(tables: dict[str, pd.DataFrame]) -> None:
         (df for title, df in tables.items() if "Average Detections Across All Agents" in title),
         None,
     )
+    end_conditions_table = next(
+        (df for title, df in tables.items() if "End Condition Rates" in title), None
+    )
 
     if raw_outcomes is None or raw_outcomes.empty:
         st.info("No replication-level detection outcomes found in summary_stats.csv.")
         return
+
+    if name_map:
+        raw_outcomes = apply_display_names(raw_outcomes, name_map)
+        if table_1 is not None and not table_1.empty:
+            table_1 = apply_display_names(table_1, name_map)
 
     total_reps = int(raw_outcomes["replication_id"].nunique())
     confirmed_detections = int(
@@ -38,19 +60,51 @@ def render_analytics_tab(tables: dict[str, pd.DataFrame]) -> None:
         confirmed_detections / total_reps if total_reps > 0 else 0.0
     )
 
+    def _rate_for(cond: str) -> tuple[int, float]:
+        if (
+            end_conditions_table is not None
+            and not end_conditions_table.empty
+            and "end_condition" in end_conditions_table.columns
+        ):
+            matching = end_conditions_table[end_conditions_table["end_condition"] == cond]
+            if not matching.empty:
+                return int(matching["count"].iloc[0]), float(matching["rate"].iloc[0])
+        # Fallback to computing from raw_outcomes if end_conditions_table is not present
+        if "end_condition" in raw_outcomes.columns:
+            rep_end = raw_outcomes[["replication_id", "end_condition"]].dropna().drop_duplicates(subset=["replication_id"])
+            matching = rep_end[rep_end["end_condition"] == cond]
+            count = len(matching)
+            rate = count / total_reps if total_reps > 0 else 0.0
+            return count, rate
+        return 0, 0.0
+
+    time_count, time_rate = _rate_for("time_limit")
+    escape_count, escape_rate = _rate_for("target_escaped")
+    det_count, det_rate = _rate_for("detection")
+    blue_det_count, blue_det_rate = _rate_for("blue_team_detection")
+    red_det_count, red_det_rate = _rate_for("red_team_detection")
+
     # Top KPI Metrics Cards
     kpi1, kpi2, kpi3, kpi4 = st.columns(4)
     kpi1.metric("Total Replications", f"{total_reps:,}")
     kpi2.metric("Fleet Detection Prob (P_det)", f"{fleet_p_det:.1%}")
-    kpi3.metric("Successful Detections", f"{confirmed_detections:,}")
+    kpi3.metric("Time Limit Reached", f"{time_rate:.1%}", help=f"{time_count} replications")
+    kpi4.metric("Target Escaped", f"{escape_rate:.1%}", help=f"{escape_count} replications")
+
+    st.caption("Detection Outcomes Breakdown:")
+    det_col1, det_col2, det_col3, det_col4 = st.columns(4)
+    det_col1.metric("Initial Detection", f"{det_rate:.1%}", help=f"{det_count} replications")
+    det_col2.metric("Blue Team Detection", f"{blue_det_rate:.1%}", help=f"{blue_det_count} replications")
+    det_col3.metric("Red Team Detection", f"{red_det_rate:.1%}", help=f"{red_det_count} replications")
+
     detected_times = pd.to_numeric(
-        raw_outcomes[raw_outcomes["detection_outcome"] == True][
+        raw_outcomes[raw_outcomes["detection_outcome"]][
             "detection_timestamp_minutes"
         ],
         errors="coerce",
     ).dropna()
     mean_time = f"{detected_times.mean():.1f} min" if not detected_times.empty else "N/A"
-    kpi4.metric("Mean Time to Detect", mean_time)
+    det_col4.metric("Mean Time to Detect", mean_time)
 
     st.markdown("---")
 
@@ -160,7 +214,7 @@ def main() -> None:
 
     with animation_tab:
         try:
-            positions, sensors, timing = load_animation_inputs(selected_folder)
+            positions, sensors, timing, name_map = load_animation_inputs(selected_folder)
         except (OSError, ValueError) as error:
             st.error(f"Could not load animation inputs: {error}")
         else:
@@ -170,8 +224,24 @@ def main() -> None:
                 replications,
                 format_func=lambda value: f"Replication {value}",
             )
-            platforms = build_platforms(positions, sensors, int(selected_replication))
-            st.plotly_chart(build_animation(platforms, timing))
+            platforms = build_platforms(
+                positions, sensors, int(selected_replication), name_map=name_map
+            )
+            timing["end_time_sec"] = compute_replication_end_sec(platforms)
+
+            col1, col2 = st.columns(2)
+            col1.text_input(
+                "Simulation Time Limit (User Input)",
+                value=f"{timing['time_limit_sec'] / 60.0:.2f} min ({timing['time_limit_sec']:.1f} s)",
+                disabled=True,
+            )
+            col2.text_input(
+                "Replication Duration",
+                value=f"{timing['end_time_sec'] / 60.0:.2f} min ({timing['end_time_sec']:.1f} s)",
+                disabled=True,
+            )
+
+            st.plotly_chart(build_animation(platforms, timing), use_container_width=True)
 
     with analytics_tab:
         try:
@@ -179,7 +249,15 @@ def main() -> None:
         except OSError as error:
             st.error(f"Could not load summary_stats.csv: {error}")
         else:
-            render_analytics_tab(tables)
+            name_map: dict[str, str] = {}
+            config_path = selected_folder / "input_data" / "config.yaml"
+            if config_path.exists():
+                try:
+                    config_data = load_config_from_yaml(config_path)
+                    name_map = build_display_name_map(config_data)
+                except Exception:
+                    name_map = {}
+            render_analytics_tab(tables, name_map=name_map)
 
     with positions_tab:
         try:
@@ -187,7 +265,16 @@ def main() -> None:
         except OSError as error:
             st.error(f"Could not load raw_positions.csv: {error}")
         else:
-            st.dataframe(raw_positions, width="stretch")
+            mapped_positions = (
+                apply_display_names(
+                    raw_positions,
+                    name_map,
+                    columns=("platform_id", "detecting_platform_id", "target_platform_id"),
+                )
+                if name_map
+                else raw_positions
+            )
+            st.dataframe(mapped_positions, width="stretch")
 
     with summary_tab:
         try:
@@ -197,7 +284,16 @@ def main() -> None:
         else:
             for title, table in tables.items():
                 st.subheader(title)
-                st.dataframe(table, width="stretch")
+                mapped_table = (
+                    apply_display_names(
+                        table,
+                        name_map,
+                        columns=("detecting_platform_id", "target_platform_id", "platform_id"),
+                    )
+                    if name_map
+                    else table
+                )
+                st.dataframe(mapped_table, width="stretch")
 
 
 main()

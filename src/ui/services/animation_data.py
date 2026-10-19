@@ -8,8 +8,9 @@ snapshot plus `raw_positions.csv`, so this module never touches the live
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Mapping, Optional
 
 import pandas as pd
 
@@ -24,6 +25,12 @@ from src.ui.plotting.platform_animation import (
     SimulationTiming,
 )
 
+logger = logging.getLogger(__name__)
+
+PlatformNameMap = dict[str, str]
+PlatformMap = dict[str, PlatformAnimationData]
+AnimationInputs = tuple[pd.DataFrame, list[SensorDefinition], SimulationTiming, PlatformNameMap]
+
 REQUIRED_POSITION_COLUMNS = {
     "replication_id",
     "platform_id",
@@ -37,6 +44,7 @@ REQUIRED_POSITION_COLUMNS = {
     "detection_made",
     "detection_sensor_name",
     "detection_distance_km",
+    "heading",
 }
 _STRING_COLUMNS = {"platform_id", "team", "target_platform_id", "detection_sensor_name"}
 
@@ -44,32 +52,63 @@ _STRING_COLUMNS = {"platform_id", "team", "target_platform_id", "detection_senso
 def load_timing(config_data: ConfigData) -> SimulationTiming:
     """Extract animation timing from a validated ConfigData."""
     return {
-        "time_limit_sec": config_data.simulation.time_limit_sec,
-        "world_timestep_sec": config_data.simulation.timestep_sec,
+        "time_limit_sec": float(config_data.simulation.time_limit_sec),
+        "world_timestep_sec": float(config_data.simulation.timestep_sec),
     }
 
 
-def load_sensors(config_data: ConfigData) -> List[SensorDefinition]:
-    """Build sensor field-of-view definitions, keyed by the same runtime platform ids
-    (Blue_1, Red_1, ...) that raw_positions.csv uses - not the config display_name.
-    """
+def build_display_name_map(config_data: ConfigData) -> PlatformNameMap:
+    """Map runtime platform ids (Blue_1, Red_1, ...) to config display names."""
+    platform_ids = assign_platform_ids(config_data.platforms)
+    name_map: PlatformNameMap = {}
+    for platform_id, platform in zip(platform_ids, config_data.platforms):
+        display_name = (getattr(platform, "display_name", "") or "").strip()
+        if not display_name:
+            display_name = platform_id
+        if display_name in name_map.values():
+            logger.warning(
+                "Duplicate platform display name detected in config: '%s'", display_name
+            )
+        name_map[platform_id] = display_name
+    return name_map
+
+
+def compute_replication_end_sec(
+    platforms: Mapping[str, PlatformAnimationData],
+) -> float:
+    """Return the maximum recorded timestamp in seconds across all platforms in a replication."""
+    if not platforms:
+        raise ValueError("Cannot compute end time for empty platforms dictionary")
+    return max(
+        float(record["timestamp_sec"])
+        for platform in platforms.values()
+        for record in platform["positions"]
+    )
+
+
+def load_sensors(config_data: ConfigData) -> list[SensorDefinition]:
+    """Build sensor field-of-view definitions, keyed by runtime platform ids."""
     platform_ids = assign_platform_ids(config_data.platforms)
 
-    sensors: List[SensorDefinition] = []
+    sensors: list[SensorDefinition] = []
     for platform_id, platform in zip(platform_ids, config_data.platforms):
         for sensor in platform.sensors:
             sensors.append(
                 {
                     "platform_id": platform_id,
                     "name": sensor.display_name,
-                    "fov_start_deg": getattr(
-                        sensor, "fov_start_deg", getattr(sensor, "fov_start_angle", 0.0)
+                    "fov_start_deg": float(
+                        getattr(
+                            sensor, "fov_start_deg", getattr(sensor, "fov_start_angle", 0.0)
+                        )
                     ),
-                    "fov_end_deg": getattr(
-                        sensor, "fov_end_deg", getattr(sensor, "fov_end_angle", 360.0)
+                    "fov_end_deg": float(
+                        getattr(
+                            sensor, "fov_end_deg", getattr(sensor, "fov_end_angle", 360.0)
+                        )
                     ),
                     "range_km": (
-                        max(sensor.x_values) / 1000.0 if sensor.x_values else 0.0
+                        float(max(sensor.x_values)) / 1000.0 if sensor.x_values else 0.0
                     ),
                 }
             )
@@ -100,8 +139,7 @@ def load_positions(csv_path: Path) -> pd.DataFrame:
     positions[list(numeric_columns)] = positions[list(numeric_columns)].apply(
         pd.to_numeric, errors="raise"
     )
-    if "heading" in positions.columns:
-        positions["heading"] = pd.to_numeric(positions["heading"], errors="coerce")
+    positions["heading"] = positions["heading"] % 360.0
 
     positions["timestamp_sec"] = positions["timestamp_minutes"] * 60.0
     return positions.sort_values(
@@ -111,7 +149,7 @@ def load_positions(csv_path: Path) -> pd.DataFrame:
 
 def load_animation_inputs(
     run_folder: Path,
-) -> Tuple[pd.DataFrame, List[SensorDefinition], SimulationTiming]:
+) -> AnimationInputs:
     """Load everything needed to animate any replication in a self-contained run folder."""
     config_path = run_folder / "input_data" / "config.yaml"
     positions_path = run_folder / "raw_positions.csv"
@@ -121,26 +159,28 @@ def load_animation_inputs(
         load_positions(positions_path),
         load_sensors(config_data),
         load_timing(config_data),
+        build_display_name_map(config_data),
     )
 
 
 def build_platforms(
     positions: pd.DataFrame,
-    sensors: List[SensorDefinition],
+    sensors: list[SensorDefinition],
     replication_id: int,
-) -> Dict[str, PlatformAnimationData]:
+    name_map: Optional[PlatformNameMap] = None,
+) -> PlatformMap:
     """Slice positions down to one replication and group them per platform."""
     replication = positions[positions["replication_id"] == replication_id]
     if replication.empty:
         raise ValueError(f"Replication {replication_id} has no position data")
 
-    sensor_by_platform: Dict[str, List[SensorDefinition]] = {}
+    sensor_by_platform: dict[str, list[SensorDefinition]] = {}
     for sensor in sensors:
         sensor_by_platform.setdefault(sensor["platform_id"], []).append(sensor)
 
-    platforms: Dict[str, PlatformAnimationData] = {}
+    platforms: PlatformMap = {}
     for platform_id, platform_rows in replication.groupby("platform_id"):
-        records: List[PlatformPosition] = []
+        records: list[PlatformPosition] = []
         for row in platform_rows.sort_values("timestamp_sec").itertuples():
             records.append(
                 {
@@ -167,18 +207,23 @@ def build_platforms(
                         if pd.notna(row.detection_distance_km)
                         else None
                     ),
-                    "heading": (
-                        float(row.heading)
-                        if hasattr(row, "heading") and pd.notna(row.heading)
-                        else None
-                    ),
+                    "heading": float(row.heading),
                 }
             )
-        detections: List[DetectionEvent] = [
+        disp_name = (
+            name_map.get(str(platform_id), str(platform_id))
+            if name_map
+            else str(platform_id)
+        )
+        detections: list[DetectionEvent] = [
             {
                 "timestamp_sec": record["timestamp_sec"],
-                "detecting_platform_id": str(platform_id),
-                "target_platform_id": record["target_platform_id"],
+                "detecting_platform_id": disp_name,
+                "target_platform_id": (
+                    name_map.get(str(record["target_platform_id"]), str(record["target_platform_id"]))
+                    if name_map
+                    else str(record["target_platform_id"])
+                ),
                 "sensor_name": record["detection_sensor_name"],
                 "distance_m": record["detection_distance_km"] * 1000.0
                 if record["detection_distance_km"] is not None
@@ -188,6 +233,7 @@ def build_platforms(
             if record["detection_made"] and record["target_platform_id"]
         ]
         platforms[str(platform_id)] = {
+            "display_name": disp_name,
             "positions": records,
             "sensors": sensor_by_platform.get(str(platform_id), []),
             "detections": detections,
@@ -197,8 +243,11 @@ def build_platforms(
 
 def load_replication_animation_data(
     run_folder: Path, replication_id: int
-) -> Tuple[Dict[str, PlatformAnimationData], SimulationTiming]:
+) -> tuple[PlatformMap, SimulationTiming]:
     """Convenience entry point used by both the CLI and the Streamlit page."""
-    positions, sensors, timing = load_animation_inputs(run_folder)
-    platforms = build_platforms(positions, sensors, replication_id)
+    positions, sensors, timing, name_map = load_animation_inputs(run_folder)
+    platforms = build_platforms(
+        positions, sensors, replication_id, name_map=name_map
+    )
+    timing["end_time_sec"] = compute_replication_end_sec(platforms)
     return platforms, timing

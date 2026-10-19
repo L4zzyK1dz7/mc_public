@@ -6,7 +6,6 @@ Verification of detection managers, serialization pipelines, and summary analyti
 from __future__ import annotations
 
 from pathlib import Path
-import pandas as pd
 import pytest
 
 from src.monte_carlo.detection_pipeline.events import DetectionEvent
@@ -18,6 +17,7 @@ from src.monte_carlo.output.summary_stats import (
     generate_table_2,
     generate_table_3,
     generate_table_4,
+    generate_table_5,
     write_summary_stats_csv,
 )
 from src.schemas.output import DetectionOutcomeEvent, PlatformPositionEvent
@@ -127,7 +127,8 @@ def test_out_04_serialization_positions_df_and_summary_csv(tmp_path: Path):
     assert "# 1. Average Detections Across All Agents" in content
     assert "# 2. Average Detections Across All Agent Sensors" in content
     assert "# 3. Probability of At Least One Detection" in content
-    assert "# 4. Replication-Level Detection Outcomes" in content
+    assert "# 4. End Condition Rates Across Replications" in content
+    assert "# 5. Replication-Level Detection Outcomes" in content
 
 
 # ==============================================================================
@@ -200,3 +201,58 @@ def test_out_06_safe_directory_hierarchy_generation(tmp_path: Path):
     run2 = get_next_run_folder(nested_base)
     assert run2.exists()
     assert "run_002" in run2.name
+
+
+# ==============================================================================
+# OUT-07: Table 4 End Condition Rates & Table 5 Replication-Level Outcomes
+# ==============================================================================
+def test_out_07_generate_table_4_and_csv_section(tmp_path: Path):
+    """Verify Table 4 calculates accurate end condition rates and serializes cleanly."""
+    end_conditions = (
+        ["detection"] * 5
+        + ["time_limit"] * 3
+        + ["target_escaped"] * 2
+    )
+    t4 = generate_table_4(end_conditions=end_conditions)
+    assert "end_condition" in t4.columns
+    assert "count" in t4.columns
+    assert "rate" in t4.columns
+
+    det_row = t4[t4["end_condition"] == "detection"].iloc[0]
+    assert det_row["count"] == 5
+    assert det_row["rate"] == pytest.approx(0.5)
+
+    time_row = t4[t4["end_condition"] == "time_limit"].iloc[0]
+    assert time_row["count"] == 3
+    assert time_row["rate"] == pytest.approx(0.3)
+
+    escape_row = t4[t4["end_condition"] == "target_escaped"].iloc[0]
+    assert escape_row["count"] == 2
+    assert escape_row["rate"] == pytest.approx(0.2)
+
+    # All canonical conditions exist even with 0 count
+    blue_det = t4[t4["end_condition"] == "blue_team_detection"].iloc[0]
+    assert blue_det["count"] == 0
+    assert blue_det["rate"] == 0.0
+
+    # Serialization test verifying swapped order: Table 4 is End Conditions, Table 5 is Replication-Level Outcomes
+    csv_out = tmp_path / "summary_stats.csv"
+    write_summary_stats_csv([], csv_out, end_conditions=end_conditions)
+    content = csv_out.read_text(encoding="utf-8")
+    assert "# 4. End Condition Rates Across Replications" in content
+    assert "# 5. Replication-Level Detection Outcomes" in content
+    assert content.index("# 4. End Condition Rates Across Replications") < content.index(
+        "# 5. Replication-Level Detection Outcomes"
+    )
+    assert "detection,5,0.5" in content
+
+    # Empty conditions test
+    empty_t4 = generate_table_4([])
+    assert (empty_t4["count"] == 0).all()
+    assert (empty_t4["rate"] == 0.0).all()
+
+    # Table 5 replication outcomes test
+    t5 = generate_table_5([])
+    assert "detecting_platform_id" in t5.columns
+    assert "target_platform_id" in t5.columns
+

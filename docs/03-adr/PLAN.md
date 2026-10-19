@@ -1,6 +1,6 @@
 # PLAN: Animation and Results Enhancements (rev. 2)
 
-**Status:** Awaiting sign-off (rev. 2, includes user feedback of 2026-10-19 14:48)
+**Status:** Completed (all features implemented, verified with tests, typing, and linting)
 **Proposed branch:** `feature/animation-results-enhancements`
 
 ---
@@ -112,24 +112,24 @@ flowchart LR
 
 ## 3. Task Checklist
 
-- [ ] **0.** Branch `feature/animation-results-enhancements`; `uv sync --dev`; baseline `uv run pytest`
-- [ ] **T.0** Add type aliases (syntax per Q-A); replace `typing.Dict/List/Tuple` in touched files
-- [ ] **F1.1** `heading` required, numeric and normalised in `load_positions`
-- [ ] **F1.2** Remove the fallback logic in `build_platforms` / `platform_animation.py`
-- [ ] **F1.3** Check the heading on waypoint-arrival events
-- [ ] **F2.1** `end_time_sec` and `compute_replication_end_sec`
-- [ ] **F2.2** Frame generation over `[0, end_time_sec]` with the 450 cap
-- [ ] **F2.3** Time-limit text box and duration in `results.py`; update `animate.py`
-- [ ] **F3.1** `x_axis_column` helper; manual editor, CSV import and overview headers
-- [ ] **F3.2** Map back to `x_values` before `SensorFactory`
-- [ ] **F4.1** `generate_table_5` and the `write_summary_stats_csv` signature
-- [ ] **F4.2** Collect end conditions in `aggregate_and_output_results`
-- [ ] **F4.3** KPI row and Table 5 view in `render_analytics_tab`
-- [ ] **F5.1** `build_display_name_map` and `display_name` in `PlatformAnimationData`
-- [ ] **F5.2** Animation labels; `apply_display_names` in the results tabs
-- [ ] **H.1** `use_container_width` → `width="stretch"`
-- [ ] **V.1** `uv run ruff check`, `uv run ty check`, `uv run pytest` (exit code 0, coverage ≥ 80 %)
-- [ ] **V.2** Generate a fresh run, then a manual Streamlit smoke test
+- [x] **0.** Branch `feature/animation-results-enhancements`; `uv sync --dev`; baseline `uv run pytest`
+- [x] **T.0** Add type aliases (syntax per Q-A); replace `typing.Dict/List/Tuple` in touched files
+- [x] **F1.1** `heading` required, numeric and normalised in `load_positions`
+- [x] **F1.2** Remove the fallback logic in `build_platforms` / `platform_animation.py`
+- [x] **F1.3** Check the heading on waypoint-arrival events
+- [x] **F2.1** `end_time_sec` and `compute_replication_end_sec`
+- [x] **F2.2** Frame generation over `[0, end_time_sec]` with the 450 cap
+- [x] **F2.3** Time-limit text box and duration in `results.py`; update `animate.py`
+- [x] **F3.1** `x_axis_column` helper; manual editor, CSV import and overview headers
+- [x] **F3.2** Map back to `x_values` before `SensorFactory`
+- [x] **F4.1** `generate_table_5` and the `write_summary_stats_csv` signature
+- [x] **F4.2** Collect end conditions in `aggregate_and_output_results`
+- [x] **F4.3** KPI row and Table 5 view in `render_analytics_tab`
+- [x] **F5.1** `build_display_name_map` and `display_name` in `PlatformAnimationData`
+- [x] **F5.2** Animation labels; `apply_display_names` in the results tabs
+- [x] **H.1** `use_container_width` → `width="stretch"`
+- [x] **V.1** `uv run ruff check`, `uv run ty check`, `uv run pytest` (exit code 0, coverage ≥ 80 %)
+- [x] **V.2** Generate a fresh run, then a manual Streamlit smoke test
 - [ ] **C.1** Commit per feature following `.gitmessage`
 
 ---

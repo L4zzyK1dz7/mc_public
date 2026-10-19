@@ -5,7 +5,7 @@ Sensor section rendering and validation for platform creation.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Optional
 
 import pandas as pd
 import streamlit as st
@@ -19,31 +19,46 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _parse_sensor_csv(sensor_table: pd.DataFrame) -> Tuple[pd.DataFrame, Optional[str]]:
-    """
-    Normalise a sensor CSV into x_values and pod columns.
-    """
-    if {"x_values", "pod"}.issubset(sensor_table.columns):
-        return sensor_table[["x_values", "pod"]], None
+def _x_axis_label(sensor_type: str) -> str:
+    """Return the label for the independent variable column depending on sensor type."""
+    if (sensor_type or "").lower() == "generic":
+        return "distance_m"
+    return "x_values"
+
+
+def _parse_sensor_csv(
+    sensor_table: pd.DataFrame,
+    sensor_type: str = "generic",
+) -> tuple[pd.DataFrame, Optional[str]]:
+    """Normalise a sensor CSV into x_values and pod columns."""
+    target_x_col = _x_axis_label(sensor_type)
+
+    for col_name in [target_x_col, "distance_m", "range_m", "x_values"]:
+        if {col_name, "pod"}.issubset(sensor_table.columns):
+            parsed = sensor_table[[col_name, "pod"]].copy()
+            parsed.columns = ["x_values", "pod"]
+            msg = (
+                f"CSV column '{col_name}' was mapped to {target_x_col}."
+                if col_name != target_x_col and col_name != "x_values"
+                else None
+            )
+            return parsed, msg
 
     if len(sensor_table.columns) >= 2:
         parsed_table = sensor_table.iloc[:, :2].copy()
         parsed_table.columns = ["x_values", "pod"]
-        return parsed_table, "CSV columns were auto-mapped to x_values and pod."
+        return parsed_table, f"CSV columns were auto-mapped to {target_x_col} and pod."
 
     return (
         pd.DataFrame(),
-        "CSV must include x_values and pod columns, or at least two numeric columns.",
+        f"CSV must include {target_x_col} (or range_m/x_values) and pod columns, or at least two numeric columns.",
     )
 
 
 def _extract_valid_sensor_points(
     table: pd.DataFrame,
-) -> Tuple[list, list, Optional[str]]:
-    """
-    Normalise a table to x_values and pod lists and validate POD bounds.
-    validation step for x_values and pod lists, ensuring all pod values are between 0 and 1.
-    """
+) -> tuple[list[float], list[float], Optional[str]]:
+    """Normalise a table to x_values and pod lists and validate POD bounds."""
     if table.empty or not {"x_values", "pod"}.issubset(table.columns):
         return [], [], "No valid sensor rows found."
 
@@ -53,7 +68,7 @@ def _extract_valid_sensor_points(
     normalised = normalised.dropna(subset=["x_values", "pod"])
 
     if normalised.empty:
-        return [], [], "Provide at least one row with numeric x_values and pod values."
+        return [], [], "Provide at least one row with numeric values and pod values."
 
     out_of_bounds = normalised[(normalised["pod"] < 0.0) | (normalised["pod"] > 1.0)]
     if not out_of_bounds.empty:
@@ -152,23 +167,36 @@ def _render_manual_editor(
     sensor_data_payload: dict,
     table_editor_key: str,
 ) -> None:
+    sensor_type = str(sensor_data_payload.get("sensor_type", "generic"))
+    x_label = _x_axis_label(sensor_type)
+    caption_text = (
+        "Provide distance_m and pod rows. POD must be between 0 and 1."
+        if x_label == "distance_m"
+        else "Provide x_values and pod rows. POD must be between 0 and 1."
+    )
     with st.form(key=f"sensor_manual_form_{index}", clear_on_submit=False):
-        st.caption("Provide x_values and pod rows. POD must be between 0 and 1.")
+        st.caption(caption_text)
 
         # Extract sensor performance data
         default_table = {
-            "x_values": sensor_data_payload.get("x_values", []),
+            x_label: sensor_data_payload.get("x_values", []),
             "pod": sensor_data_payload.get("pod", []),
         }
+
+        help_text = (
+            "Distance in metres from the sensor."
+            if x_label == "distance_m"
+            else "Independent variable (e.g. range or time)."
+        )
 
         sensor_table = st.data_editor(
             pd.DataFrame(default_table),
             num_rows="dynamic",
             width="stretch",
             column_config={
-                "x_values": st.column_config.NumberColumn(
-                    "x_values",
-                    help="Independent variable (e.g. range or time).",
+                x_label: st.column_config.NumberColumn(
+                    x_label,
+                    help=help_text,
                     required=True,
                 ),
                 "pod": st.column_config.NumberColumn(
@@ -185,9 +213,13 @@ def _render_manual_editor(
         save_clicked = st.form_submit_button("Save Sensor")
 
     if save_clicked:
-        # validate table before saving
+        # validate table before saving (ensure x_values column is present)
+        table_to_validate = sensor_table.copy()
+        if x_label in table_to_validate.columns and "x_values" not in table_to_validate.columns:
+            table_to_validate = table_to_validate.rename(columns={x_label: "x_values"})
+
         x_values, pod_values, validation_error = _extract_valid_sensor_points(
-            sensor_table
+            table_to_validate
         )
 
         # Update payload
@@ -208,6 +240,9 @@ def _render_import_editor(index: int, sensor_data_payload: dict) -> None:
     """
     Render CSV import editor for one row.
     """
+    sensor_type = str(sensor_data_payload.get("sensor_type", "generic"))
+    x_label = _x_axis_label(sensor_type)
+
     with st.form(key=f"sensor_import_form_{index}", clear_on_submit=False):
         parsed_table = pd.DataFrame()
         uploaded_file = st.file_uploader(
@@ -217,14 +252,15 @@ def _render_import_editor(index: int, sensor_data_payload: dict) -> None:
         )
         if uploaded_file is not None:
             raw_table = pd.read_csv(uploaded_file)
-            parsed_table, parse_message = _parse_sensor_csv(raw_table)
+            parsed_table, parse_message = _parse_sensor_csv(raw_table, sensor_type=sensor_type)
             if parse_message:
                 if parsed_table.empty:
                     st.error(parse_message)
                 else:
                     st.warning(parse_message)
             if not parsed_table.empty:
-                st.dataframe(parsed_table, width="stretch")
+                preview_table = parsed_table.rename(columns={"x_values": x_label})
+                st.dataframe(preview_table, width="stretch")
 
         save_clicked = st.form_submit_button("Save Sensor")
 

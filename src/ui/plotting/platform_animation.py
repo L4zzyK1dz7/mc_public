@@ -7,8 +7,7 @@ it can be reused by both a Streamlit page and a plain CLI script.
 
 from __future__ import annotations
 
-import math
-from typing import Dict, List, Optional, Tuple, TypedDict, cast
+from typing import Mapping, Optional, TypedDict, cast
 
 import numpy as np
 import plotly.graph_objects as go
@@ -17,9 +16,10 @@ MAX_ANIMATION_FRAMES = 450
 FRAME_DURATION_MS = 100
 
 
-class SimulationTiming(TypedDict):
+class SimulationTiming(TypedDict, total=False):
     time_limit_sec: float
     world_timestep_sec: float
+    end_time_sec: Optional[float]
 
 
 class PlatformPosition(TypedDict, total=False):
@@ -53,25 +53,18 @@ class SensorDefinition(TypedDict):
     range_km: float
 
 
-class PlatformAnimationData(TypedDict):
-    positions: List[PlatformPosition]
-    sensors: List[SensorDefinition]
-    detections: List[DetectionEvent]
+class PlatformAnimationData(TypedDict, total=False):
+    display_name: str
+    positions: list[PlatformPosition]
+    sensors: list[SensorDefinition]
+    detections: list[DetectionEvent]
 
 
 def _platform_heading_deg(position: PlatformPosition) -> float:
-    """Return the heading in degrees for a platform position, falling back to waypoint direction."""
+    """Return the heading in degrees for a platform position."""
     heading = position.get("heading")
     if heading is not None and not (isinstance(heading, float) and np.isnan(heading)):
-        return float(heading)
-    pos_x = position.get("pos_x_km", 0.0)
-    pos_y = position.get("pos_y_km", 0.0)
-    wp_x = position.get("waypoint_x_km", pos_x)
-    wp_y = position.get("waypoint_y_km", pos_y)
-    dx = wp_x - pos_x
-    dy = wp_y - pos_y
-    if math.hypot(dx, dy) > 1e-6:
-        return math.degrees(math.atan2(dy, dx)) % 360.0
+        return float(heading) % 360.0
     return 0.0
 
 
@@ -82,7 +75,7 @@ def _sector_points(
     end_deg: float,
     radius_km: float,
     heading_deg: float = 0.0,
-) -> Tuple[List[float], List[float]]:
+) -> tuple[list[float], list[float]]:
     diff = end_deg - start_deg
     if diff == 360.0 or (start_deg == 0.0 and end_deg == 360.0):
         span = 360.0
@@ -122,15 +115,13 @@ def _position_at_time(
                 interpolated[field] = left[field] + fraction * (
                     right[field] - left[field]
                 )
-            if left.get("heading") is not None and not (
-                isinstance(left["heading"], float) and np.isnan(left["heading"])
+            left_heading = left.get("heading")
+            if left_heading is not None and not (
+                isinstance(left_heading, float) and np.isnan(left_heading)
             ):
-                interpolated["heading"] = left["heading"]
+                interpolated["heading"] = float(left_heading) % 360.0
             else:
-                dx = right["pos_x_km"] - left["pos_x_km"]
-                dy = right["pos_y_km"] - left["pos_y_km"]
-                if math.hypot(dx, dy) > 1e-6:
-                    interpolated["heading"] = math.degrees(math.atan2(dy, dx)) % 360.0
+                interpolated["heading"] = 0.0
             return cast(PlatformPosition, interpolated)
     return positions[-1]
 
@@ -151,7 +142,7 @@ def _rgba_color(hex_color: str, alpha: float) -> str:
 
 
 def build_animation(
-    platforms: Dict[str, PlatformAnimationData],
+    platforms: Mapping[str, PlatformAnimationData],
     timing: SimulationTiming,
 ) -> go.Figure:
     """Build an animated Plotly figure for one replication's already-loaded platform data."""
@@ -159,9 +150,11 @@ def build_animation(
         [event for platform in platforms.values() for event in platform["detections"]],
         key=lambda event: event["timestamp_sec"],
     )
+    end_time_sec = float(timing.get("end_time_sec") or timing["time_limit_sec"])
+
     regular_frame_times = np.arange(
         0.0,
-        timing["time_limit_sec"] + timing["world_timestep_sec"] * 0.5,
+        end_time_sec + timing["world_timestep_sec"] * 0.5,
         timing["world_timestep_sec"],
     )
     if len(regular_frame_times) <= MAX_ANIMATION_FRAMES:
@@ -169,7 +162,7 @@ def build_animation(
     else:
         frame_times = np.linspace(
             0.0,
-            timing["time_limit_sec"],
+            end_time_sec,
             MAX_ANIMATION_FRAMES,
         )
 
@@ -177,18 +170,18 @@ def build_animation(
         [
             event["timestamp_sec"]
             for event in detection_events
-            if 0.0 <= event["timestamp_sec"] <= timing["time_limit_sec"]
+            if 0.0 <= event["timestamp_sec"] <= end_time_sec
         ],
         dtype=float,
     )
     frame_times = np.unique(
         np.concatenate(
-            (frame_times, detection_times, np.array([0.0, timing["time_limit_sec"]]))
+            (frame_times, detection_times, np.array([0.0, end_time_sec]))
         )
     )
 
     figure = go.Figure()
-    trace_specs: List[Tuple[str, str, Optional[SensorDefinition]]] = []
+    trace_specs: list[tuple[str, str, Optional[SensorDefinition]]] = []
     detection_targets = {
         event["target_platform_id"]
         for platform in platforms.values()
@@ -198,13 +191,15 @@ def build_animation(
     for platform_id, platform in platforms.items():
         initial = _position_at_time(platform, 0.0)
         color = _team_color(initial["team"])
+        disp_name = platform.get("display_name", platform_id)
+
         trace_specs.append(("trail", platform_id, None))
         figure.add_trace(
             go.Scatter(
                 x=[initial["pos_x_km"]],
                 y=[initial["pos_y_km"]],
                 mode="lines",
-                name=f"{platform_id} trail",
+                name=f"{disp_name} trail",
                 line={"color": color, "width": 3, "dash": "dot"},
                 hoverinfo="skip",
             )
@@ -215,7 +210,7 @@ def build_animation(
                 x=[initial["pos_x_km"]],
                 y=[initial["pos_y_km"]],
                 mode="markers",
-                name=f"{platform_id} ({initial['team']})",
+                name=f"{disp_name} ({initial['team']})",
                 marker={"color": color, "size": 12},
             )
         )
@@ -236,28 +231,27 @@ def build_animation(
                     y=sector_y,
                     mode="lines",
                     fill="toself",
-                    name=f"{platform_id} {sensor['name']}",
+                    name=f"{disp_name} {sensor['name']}",
                     line={"color": color, "width": 1},
                     fillcolor=_rgba_color(color, 0.2),
                     hoverinfo="skip",
                 )
             )
-        if platform_id in detection_targets:
+        if platform_id in detection_targets or disp_name in detection_targets:
             trace_specs.append(("detection", platform_id, None))
             figure.add_trace(
                 go.Scatter(
                     x=[],
                     y=[],
                     mode="markers",
-                    name=f"{platform_id} detection",
+                    name=f"{disp_name} detection",
                     marker={
                         "color": "#f59e0b",
                         "size": 18,
                         "symbol": "star",
                         "line": {"color": "#7c2d12", "width": 1},
                     },
-                    hovertemplate="Detection target: "
-                    + f"{platform_id}<extra></extra>",
+                    hovertemplate=f"Detection target: {disp_name}<extra></extra>",
                 )
             )
 
@@ -301,7 +295,7 @@ def build_animation(
                     event
                     for source_platform in platforms.values()
                     for event in source_platform["detections"]
-                    if event["target_platform_id"] == platform_id
+                    if event["target_platform_id"] in (platform_id, platform.get("display_name", platform_id))
                     and event["timestamp_sec"] <= timestamp_sec
                 ]
                 if matching_events:
@@ -337,12 +331,15 @@ def build_animation(
     y_min = min(position["pos_y_km"] for position in all_positions) - maximum_range
     y_max = max(position["pos_y_km"] for position in all_positions) + maximum_range
 
+    def _resolve_name(pid: str) -> str:
+        return platforms.get(pid, {}).get("display_name", pid)
+
     detection_buttons = [
         {
             "label": (
                 f"Jump to detection ({_seconds_to_minutes(event['timestamp_sec']):.2f} min): "
-                f"{event['detecting_platform_id']} -> "
-                f"{event['target_platform_id']}"
+                f"{_resolve_name(event['detecting_platform_id'])} -> "
+                f"{_resolve_name(event['target_platform_id'])}"
             ),
             "method": "animate",
             "args": [
@@ -355,15 +352,15 @@ def build_animation(
             ],
         }
         for event in detection_events
-        if event["timestamp_sec"] <= timing["time_limit_sec"]
+        if event["timestamp_sec"] <= end_time_sec
     ]
     detection_note = "Detections: "
     if detection_events:
         detection_note += " | ".join(
             (
                 f"{_seconds_to_minutes(event['timestamp_sec']):.2f} min: "
-                f"{event['detecting_platform_id']} -> "
-                f"{event['target_platform_id']}"
+                f"{_resolve_name(event['detecting_platform_id'])} -> "
+                f"{_resolve_name(event['target_platform_id'])}"
             )
             for event in detection_events
         )

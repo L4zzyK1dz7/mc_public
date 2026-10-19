@@ -5,7 +5,6 @@ from __future__ import annotations
 import io
 import re
 from pathlib import Path
-from typing import Dict
 
 import pandas as pd
 
@@ -27,11 +26,11 @@ def load_raw_positions(run_folder: Path) -> pd.DataFrame:
     return pd.read_csv(run_folder / "raw_positions.csv", skipinitialspace=True)
 
 
-def load_summary_stats_tables(run_folder: Path) -> Dict[str, pd.DataFrame]:
+def load_summary_stats_tables(run_folder: Path) -> dict[str, pd.DataFrame]:
     """Split summary_stats.csv's "# n. Title" sections back into separate DataFrames."""
     text = (run_folder / "summary_stats.csv").read_text(encoding="utf-8").strip()
 
-    tables: Dict[str, pd.DataFrame] = {}
+    tables: dict[str, pd.DataFrame] = {}
     for section in _SECTION_HEADER.split(text):
         title, _, body = section.partition("\n")
         title = title.lstrip("#").strip()
@@ -42,3 +41,20 @@ def load_summary_stats_tables(run_folder: Path) -> Dict[str, pd.DataFrame]:
             else pd.DataFrame()
         )
     return tables
+
+
+def apply_display_names(
+    df: pd.DataFrame,
+    name_map: dict[str, str],
+    columns: tuple[str, ...] = ("detecting_platform_id", "target_platform_id"),
+) -> pd.DataFrame:
+    """Map platform ids to their user display names in the given DataFrame."""
+    if df.empty or not name_map:
+        return df
+    mapped = df.copy()
+    for col in columns:
+        if col in mapped.columns:
+            mapped[col] = mapped[col].map(
+                lambda val: name_map.get(str(val), str(val)) if pd.notna(val) else val
+            )
+    return mapped

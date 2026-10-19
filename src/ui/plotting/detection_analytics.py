@@ -9,7 +9,6 @@ No Streamlit dependencies - purely transforms DataFrames into Plotly go.Figure.
 
 from __future__ import annotations
 
-import math
 from typing import Optional
 
 import numpy as np
@@ -301,7 +300,7 @@ def build_detection_histogram(
         return None
 
     # Filter strictly positive detections with valid numeric metric
-    detected_subset = outcomes_df[outcomes_df["detection_outcome"] == True]
+    detected_subset = outcomes_df[outcomes_df["detection_outcome"]]
     series = pd.to_numeric(detected_subset[metric_col], errors="coerce").dropna()
 
     if series.empty:

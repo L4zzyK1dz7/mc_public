@@ -53,8 +53,8 @@ def create_sensor_file(
         x_values = sensor_dict.pop("x_values")
         pod = sensor_dict.pop("pod")
 
-        # if generic x_values is set to range_m
-        x_values_label = "range_m"
+        # if generic x_values is set to distance_m
+        x_values_label = "distance_m"
         if sensor.type == "specific":
             x_values_label = "x_value"
 

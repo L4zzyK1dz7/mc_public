@@ -1,45 +1,53 @@
 from __future__ import annotations
 
-from src.ui.plotting.platform_animation import build_animation
+from typing import cast
+from src.ui.plotting.platform_animation import (
+    PlatformAnimationData,
+    SimulationTiming,
+    build_animation,
+)
 
 
 def test_animation_slider_uses_minutes_for_display():
     platforms = {
-        "Blue_1": {
-            "positions": [
-                {
-                    "platform_id": "Blue_1",
-                    "team": "blue",
-                    "timestamp_sec": 0.0,
-                    "pos_x_km": 0.0,
-                    "pos_y_km": 0.0,
-                    "waypoint_x_km": 0.0,
-                    "waypoint_y_km": 0.0,
-                    "detection_made": False,
-                    "target_platform_id": None,
-                    "detection_sensor_name": None,
-                    "detection_distance_km": None,
-                },
-                {
-                    "platform_id": "Blue_1",
-                    "team": "blue",
-                    "timestamp_sec": 120.0,
-                    "pos_x_km": 1.0,
-                    "pos_y_km": 1.0,
-                    "waypoint_x_km": 1.0,
-                    "waypoint_y_km": 1.0,
-                    "detection_made": False,
-                    "target_platform_id": None,
-                    "detection_sensor_name": None,
-                    "detection_distance_km": None,
-                },
-            ],
-            "sensors": [],
-            "detections": [],
-        }
+        "Blue_1": cast(
+            PlatformAnimationData,
+            {
+                "positions": [
+                    {
+                        "platform_id": "Blue_1",
+                        "team": "blue",
+                        "timestamp_sec": 0.0,
+                        "pos_x_km": 0.0,
+                        "pos_y_km": 0.0,
+                        "waypoint_x_km": 0.0,
+                        "waypoint_y_km": 0.0,
+                        "detection_made": False,
+                        "target_platform_id": None,
+                        "detection_sensor_name": None,
+                        "detection_distance_km": None,
+                    },
+                    {
+                        "platform_id": "Blue_1",
+                        "team": "blue",
+                        "timestamp_sec": 120.0,
+                        "pos_x_km": 1.0,
+                        "pos_y_km": 1.0,
+                        "waypoint_x_km": 1.0,
+                        "waypoint_y_km": 1.0,
+                        "detection_made": False,
+                        "target_platform_id": None,
+                        "detection_sensor_name": None,
+                        "detection_distance_km": None,
+                    },
+                ],
+                "sensors": [],
+                "detections": [],
+            },
+        )
     }
 
-    timing = {"time_limit_sec": 120.0, "world_timestep_sec": 60.0}
+    timing: SimulationTiming = {"time_limit_sec": 120.0, "world_timestep_sec": 60.0}
     figure = build_animation(platforms, timing)
 
     slider = figure.layout.sliders[0]
@@ -141,8 +149,8 @@ def test_animation_frames_dynamically_rotate_sensor():
             "detections": [],
         }
     }
-
-    timing = {"time_limit_sec": 60.0, "world_timestep_sec": 60.0}
+    platforms = {"Blue_1": cast(PlatformAnimationData, platforms["Blue_1"])}
+    timing: SimulationTiming = {"time_limit_sec": 60.0, "world_timestep_sec": 60.0}
     figure = build_animation(platforms, timing)
 
     # Frame 0 (t=0.0): Heading 0 deg -> arc starts at (10, 0)
@@ -154,4 +162,145 @@ def test_animation_frames_dynamically_rotate_sensor():
     frame_1_sensor = figure.frames[1].data[2]
     assert round(frame_1_sensor.x[1], 2) == 0.0
     assert round(frame_1_sensor.y[1], 2) == 10.0
+
+
+def test_animation_slider_respects_end_time_sec():
+    platforms = {
+        "Blue_1": {
+            "display_name": "Carrier",
+            "positions": [
+                {
+                    "platform_id": "Blue_1",
+                    "team": "blue",
+                    "timestamp_sec": 0.0,
+                    "pos_x_km": 0.0,
+                    "pos_y_km": 0.0,
+                    "waypoint_x_km": 0.0,
+                    "waypoint_y_km": 0.0,
+                    "heading": 0.0,
+                    "detection_made": False,
+                    "target_platform_id": None,
+                    "detection_sensor_name": None,
+                    "detection_distance_km": None,
+                },
+                {
+                    "platform_id": "Blue_1",
+                    "team": "blue",
+                    "timestamp_sec": 180.0,
+                    "pos_x_km": 1.0,
+                    "pos_y_km": 1.0,
+                    "waypoint_x_km": 1.0,
+                    "waypoint_y_km": 1.0,
+                    "heading": 0.0,
+                    "detection_made": False,
+                    "target_platform_id": None,
+                    "detection_sensor_name": None,
+                    "detection_distance_km": None,
+                },
+            ],
+            "sensors": [],
+            "detections": [],
+        }
+    }
+
+    platforms = {"Blue_1": cast(PlatformAnimationData, platforms["Blue_1"])}
+    # Time limit is 1 hour (3600s), but replication finished at 180s (3 min)
+    timing: SimulationTiming = {
+        "time_limit_sec": 3600.0,
+        "world_timestep_sec": 60.0,
+        "end_time_sec": 180.0,
+    }
+    figure = build_animation(platforms, timing)
+
+    slider = figure.layout.sliders[0]
+    assert slider.steps[0].label == "0.00"
+    assert slider.steps[-1].label == "3.00"
+
+
+def test_animation_renders_display_names():
+    platforms = {
+        "Blue_1": {
+            "display_name": "Defender One",
+            "positions": [
+                {
+                    "platform_id": "Blue_1",
+                    "team": "blue",
+                    "timestamp_sec": 0.0,
+                    "pos_x_km": 0.0,
+                    "pos_y_km": 0.0,
+                    "waypoint_x_km": 0.0,
+                    "waypoint_y_km": 0.0,
+                    "heading": 0.0,
+                    "detection_made": True,
+                    "target_platform_id": "Red_1",
+                    "detection_sensor_name": "Sonar",
+                    "detection_distance_km": 2.0,
+                }
+            ],
+            "sensors": [
+                {
+                    "platform_id": "Blue_1",
+                    "name": "Sonar",
+                    "fov_start_deg": 0.0,
+                    "fov_end_deg": 360.0,
+                    "range_km": 5.0,
+                }
+            ],
+            "detections": [
+                {
+                    "timestamp_sec": 0.0,
+                    "detecting_platform_id": "Blue_1",
+                    "target_platform_id": "Red_1",
+                    "sensor_name": "Sonar",
+                    "distance_m": 2000.0,
+                }
+            ],
+        },
+        "Red_1": {
+            "display_name": "Intruder Alpha",
+            "positions": [
+                {
+                    "platform_id": "Red_1",
+                    "team": "red",
+                    "timestamp_sec": 0.0,
+                    "pos_x_km": 2.0,
+                    "pos_y_km": 0.0,
+                    "waypoint_x_km": 2.0,
+                    "waypoint_y_km": 0.0,
+                    "heading": 180.0,
+                    "detection_made": False,
+                    "target_platform_id": None,
+                    "detection_sensor_name": None,
+                    "detection_distance_km": None,
+                }
+            ],
+            "sensors": [],
+            "detections": [],
+        },
+    }
+
+    typed_platforms = {
+        pid: cast(PlatformAnimationData, p) for pid, p in platforms.items()
+    }
+    timing: SimulationTiming = {
+        "time_limit_sec": 60.0,
+        "world_timestep_sec": 60.0,
+        "end_time_sec": 0.0,
+    }
+    figure = build_animation(typed_platforms, timing)
+
+    # Check trace names use display names
+    trace_names = [trace.name for trace in figure.data]
+    assert "Defender One trail" in trace_names
+    assert "Defender One (blue)" in trace_names
+    assert "Defender One Sonar" in trace_names
+    assert "Intruder Alpha trail" in trace_names
+    assert "Intruder Alpha (red)" in trace_names
+
+    # Check detection jump button uses display names
+    buttons = figure.layout.updatemenus[0].buttons
+    jump_buttons = [b for b in buttons if "Jump to detection" in b.label]
+    assert len(jump_buttons) == 1
+    assert "Defender One -> Intruder Alpha" in jump_buttons[0].label
+
 

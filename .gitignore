@@ -14,3 +14,9 @@ wheels/
 # Doodles
 doodles/
 outcomes/
+
+
+# Agent-related
+.agents/
+gemini.md
+.gitmessage

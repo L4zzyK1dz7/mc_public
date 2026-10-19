@@ -6,39 +6,21 @@ platforms:
   platform_config_folder: Platform 1
   sensors:
   - generic
-  speed_mps: 5.0
+  speed_mps: 10.0
   team: Blue
 - display_name: Platform 2
   movement_type:
     type: random_walk
   neutralised_platform_behaviour: stop
   platform_config_folder: Platform 2
-  sensors:
-  - generic
-  speed_mps: 1.0
-  team: Blue
-- display_name: Platform 3
-  movement_type:
-    type: random_walk
-  neutralised_platform_behaviour: stop
-  platform_config_folder: Platform 3
-  sensors:
-  - generic
-  speed_mps: 10.0
-  team: Blue
-- display_name: Platform 4
-  movement_type:
-    type: random_walk
-  neutralised_platform_behaviour: stop
-  platform_config_folder: Platform 4
   sensors: []
   speed_mps: 10.0
   team: Red
 simulation:
   detection_end_condition: initial_detection
-  replications: 100
+  replications: 10
   seeds_file: true
-  time_limit_sec: 36000.0
+  time_limit_sec: 3600.0
   timestep_sec: 1.0
 world:
   height: 100000.0
