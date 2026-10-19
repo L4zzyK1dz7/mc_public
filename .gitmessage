@@ -1,0 +1,18 @@
+<type>(<scope>): <short imperative description, under 50 chars>
+
+# ----------------- Guided Instructions -----------------
+# Choose one <type>:
+#   feat     (New feature - MINOR bump)
+#   fix      (Bug fix - PATCH bump)
+#   docs     (Documentation changes)
+#   style    (Formatting, missing semi-colons, etc)
+#   refactor (Code change that neither fixes a bug nor adds a feature)
+#   perf     (Code change that improves performance)
+#   test     (Adding missing tests or correcting existing tests)
+#   chore    (Build process or auxiliary tool changes)
+#
+# Use imperative present tense: "Fix bug", not "Fixed bug".
+# Do not end the subject line with a period.
+# Separate subject from body with a blank line.
+# Wrap body and footer lines at 72 characters.
+# --------------------------------------------------------
