@@ -49,7 +49,17 @@ class DetectionOutcomeEvent(TypedDict):
     end_condition: Optional[str]
 
 
-class SimulationResult(TypedDict):
+class SonobuoyDetectionRecord(TypedDict):
+    """Record for an individual multistatic sonobuoy detection event."""
+
+    replication_id: int
+    timestamp_minutes: float
+    mode: str
+    detecting_id: str
+    target_platform_id: str
+
+
+class SimulationResult(TypedDict, total=False):
     """Outcome and captured position events for one replication."""
 
     result: Literal["detected", "not_detected"]
@@ -62,9 +72,14 @@ class SimulationResult(TypedDict):
         "counter_detection",
         "blue_team_detection",
         "red_team_detection",
+        "sonobuoy_single_cycle_detection",
+        "sonobuoy_multi_detection",
+        "sonobuoy_single_detection",
     ]
     platform_position_events: list[PlatformPositionEvent]
     detection_outcomes: list[DetectionOutcomeEvent]
+    sonobuoy_detections: list[SonobuoyDetectionRecord]
 
 
 SimulationResults = list[dict[int, SimulationResult]]
+

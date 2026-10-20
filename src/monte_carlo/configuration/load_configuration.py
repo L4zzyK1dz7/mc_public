@@ -11,6 +11,7 @@ import yaml
 from pydantic import ValidationError
 
 from src.monte_carlo.configuration.sensor_loader import resolve_platform_sensors
+from src.monte_carlo.configuration.sonobuoy_loader import resolve_sonobuoys
 from src.schemas.error_handling import human_readable_errors
 from src.schemas.simulation import ConfigData
 
@@ -55,6 +56,12 @@ def load_config_from_yaml(yaml_path: Path) -> ConfigData:
     for platform in platforms:
         platform["sensors"] = resolve_platform_sensors(platform, yaml_path.parent)
 
+    # Resolve sonobuoys if present
+    raw_sonobuoys = raw_config.get("sonobuoys", [])
+    resolved_sonobuoys = (
+        resolve_sonobuoys(raw_sonobuoys, yaml_path.parent) if raw_sonobuoys else []
+    )
+
     # Construct ConfigData from the parsed YAML
     # The YAML structure has nested keys: simulation, world, agents
     # Flatten these into top-level keys for attrs validation
@@ -62,7 +69,10 @@ def load_config_from_yaml(yaml_path: Path) -> ConfigData:
         "simulation": raw_config.get("simulation", {}),
         "world": raw_config.get("world", {}),
         "platforms": platforms,
+        "sonobuoys": resolved_sonobuoys,
+        "sonobuoy_field": raw_config.get("sonobuoy_field"),
     }
+
 
     # Validate and return the configuration
     try:

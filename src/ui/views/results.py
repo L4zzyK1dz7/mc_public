@@ -18,6 +18,8 @@ from src.ui.services.animation_data import (
     build_platforms,
     compute_replication_end_sec,
     load_animation_inputs,
+    load_sonobuoys,
+    load_sonobuoy_detections,
 )
 from src.ui.services.results_data import (
     apply_display_names,
@@ -83,6 +85,9 @@ def render_analytics_tab(
     det_count, det_rate = _rate_for("detection")
     blue_det_count, blue_det_rate = _rate_for("blue_team_detection")
     red_det_count, red_det_rate = _rate_for("red_team_detection")
+    sb_single_cycle_count, sb_single_cycle_rate = _rate_for("sonobuoy_single_cycle_detection")
+    sb_multi_count, sb_multi_rate = _rate_for("sonobuoy_multi_detection")
+    sb_single_count, sb_single_rate = _rate_for("sonobuoy_single_detection")
 
     # Top KPI Metrics Cards
     kpi1, kpi2, kpi3, kpi4 = st.columns(4)
@@ -106,7 +111,28 @@ def render_analytics_tab(
     mean_time = f"{detected_times.mean():.1f} min" if not detected_times.empty else "N/A"
     det_col4.metric("Mean Time to Detect", mean_time)
 
+    total_sb = sb_single_cycle_count + sb_multi_count + sb_single_count
+    if total_sb > 0:
+        st.caption("Sonobuoy Multistatic Outcomes Breakdown:")
+        sb_col1, sb_col2, sb_col3 = st.columns(3)
+        sb_col1.metric(
+            "Single Cycle Detection",
+            f"{sb_single_cycle_rate:.1%}",
+            help=f"{sb_single_cycle_count} replications",
+        )
+        sb_col2.metric(
+            "Multi-Buoy Detection",
+            f"{sb_multi_rate:.1%}",
+            help=f"{sb_multi_count} replications",
+        )
+        sb_col3.metric(
+            "Single Buoy Detection",
+            f"{sb_single_rate:.1%}",
+            help=f"{sb_single_count} replications",
+        )
+
     st.markdown("---")
+
 
     # =========================================================================
     # Tier 1: Fleet Overview & Monte Carlo Convergence
@@ -241,7 +267,27 @@ def main() -> None:
                 disabled=True,
             )
 
-            st.plotly_chart(build_animation(platforms, timing), use_container_width=True)
+            config_path = selected_folder / "input_data" / "config.yaml"
+            sonobuoys = []
+            if config_path.exists():
+                try:
+                    cfg = load_config_from_yaml(config_path)
+                    sonobuoys = load_sonobuoys(cfg)
+                except Exception:
+                    sonobuoys = []
+            sb_detections = load_sonobuoy_detections(
+                selected_folder, int(selected_replication)
+            )
+
+            st.plotly_chart(
+                build_animation(
+                    platforms,
+                    timing,
+                    sonobuoys=sonobuoys,
+                    sonobuoy_detections=sb_detections,
+                ),
+                use_container_width=True,
+            )
 
     with analytics_tab:
         try:

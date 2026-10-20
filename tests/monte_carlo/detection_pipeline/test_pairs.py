@@ -45,3 +45,15 @@ def test_yields_one_entry_per_sensor_with_all_opposing_targets(platform_factory)
         assert platform is blue
         assert {t.id for t in targets} == {"Red_1", "Red_2"}
     assert [sensor for _, sensor, _ in pairs] == [sensor_1, sensor_2]
+
+
+def test_skips_sensors_where_can_detect_is_false(platform_factory):
+    normal_sensor = SimpleNamespace(type="generic", display_name="Normal", can_detect=True)
+    ping_only_sensor = SimpleNamespace(type="generic", display_name="Ping Only", can_detect=False)
+    blue = platform_factory("Blue_1", sensors=[normal_sensor, ping_only_sensor])
+    red = platform_factory("Red_1", team="Red")
+
+    pairs = list(iter_platform_sensors([blue, red]))
+    assert len(pairs) == 1
+    assert pairs[0][1] is normal_sensor
+

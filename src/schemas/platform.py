@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Literal, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from src.schemas.movement import (
     BarrierPatrollerMovement,
@@ -73,3 +73,15 @@ class PlatformConfig(BaseModel):
         default_factory=list,
         description="A list of sensors associated with the platform. Can be empty if not specified.",
     )
+
+    @model_validator(mode="after")
+    def validate_platform_team_sensors(self) -> PlatformConfig:
+        team_str = self.team.value if isinstance(self.team, Team) else str(self.team)
+        if team_str != "Blue":
+            for sensor in self.sensors:
+                if getattr(sensor, "active_source", False):
+                    raise ValueError(
+                        f"Active source sensors are only permitted on Blue platforms, found on {self.display_name} ({team_str})"
+                    )
+        return self
+

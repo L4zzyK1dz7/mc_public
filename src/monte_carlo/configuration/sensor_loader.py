@@ -17,6 +17,7 @@ from src.schemas.sensor import SensorConfig, SensorFactory
 
 _INT_FIELDS = {"k", "n"}
 _STR_FIELDS = {"display_name", "type"}
+_BOOL_FIELDS = {"active_source", "source_receiver_collocated"}
 
 
 def _parse_sensor_csv(csv_path: Path) -> dict[str, Any]:
@@ -54,6 +55,16 @@ def _parse_sensor_csv(csv_path: Path) -> dict[str, Any]:
             payload[key] = int(value)
         elif key in _STR_FIELDS:
             payload[key] = value
+        elif key in _BOOL_FIELDS:
+            val_lower = value.strip().lower()
+            if val_lower == "true":
+                payload[key] = True
+            elif val_lower == "false":
+                payload[key] = False
+            else:
+                raise ValueError(
+                    f"Invalid boolean value for '{key}' in {csv_path}: '{value}'"
+                )
         else:
             payload[key] = float(
                 value
@@ -61,6 +72,7 @@ def _parse_sensor_csv(csv_path: Path) -> dict[str, Any]:
 
     payload["sensor_type"] = payload.pop("type")
     return payload
+
 
 
 def _load_sensor(csv_path: Path) -> SensorConfig:

@@ -11,6 +11,7 @@ import streamlit as st
 from src.monte_carlo.monte_carlo import run_simulation
 from src.schemas.platform import Team
 from src.schemas.simulation import ConfigData, SimulationConfig, World
+from src.schemas.sonobuoy import SonobuoyFieldConfig
 from src.ui.services.create_yaml import create_config_yaml
 from src.ui.user_notifier import success
 
@@ -137,6 +138,7 @@ def render_platform_status_card() -> bool:
             <h3 style="margin-top: 0; margin-bottom: 0.5rem;">{title}</h3>
             <p style="margin-bottom: 0.75rem;">{message}</p>
             <p style="margin-bottom: 0.5rem;"><strong>Platforms created:</strong> {platform_count}</p>
+            <p style="margin-bottom: 0.5rem;"><strong>Sonobuoys configured:</strong> {len(st.session_state.get("sonobuoy_draft_list", []))}</p>
             {platform_list}
         </div>
         """,
@@ -151,6 +153,14 @@ def create_cfg_data() -> None:
     Create a ConfigData object from the current session state and store it in session state.
     """
     try:
+        sonobuoys_draft = st.session_state.get("sonobuoy_draft_list", [])
+        data_fusion_req = int(st.session_state.get("data_fusion_requirement", 1))
+        sonobuoy_field = (
+            SonobuoyFieldConfig(data_fusion_requirement=data_fusion_req)
+            if sonobuoys_draft
+            else None
+        )
+
         # Create the ConfigData object from the current session state.
         cfg_data = ConfigData(
             simulation=SimulationConfig(
@@ -169,6 +179,8 @@ def create_cfg_data() -> None:
             # Dump to dicts so a stale class object (e.g. after a Streamlit hot-reload
             # redefines PlatformConfig) doesn't fail Pydantic's isinstance check.
             platforms=[p.model_dump() for p in st.session_state.platform_draft_list],
+            sonobuoys=[b.model_dump() for b in sonobuoys_draft],
+            sonobuoy_field=sonobuoy_field,
         )
         try:
             create_config_yaml(cfg_data)
@@ -195,7 +207,7 @@ def main() -> None:
     ready_to_run_simulation = render_platform_status_card()
     render_platform_table_with_delete()
 
-    create_yaml_button = st.button(
+    st.button(
         "Create Config YAML",
         help="Create a config.yaml file from the current platforms.",
         on_click=create_cfg_data,

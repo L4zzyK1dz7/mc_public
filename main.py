@@ -40,13 +40,21 @@ def establish_pages() -> None:
         title="Create Platforms",
     )
 
+    create_sonobuoys_page = st.Page(
+        page="src/ui/views/create_sonobuoys.py",
+        default=False,
+        title="Create Sonobuoys",
+    )
+
     results_page = st.Page(
         page="src/ui/views/results.py",
         default=False,
         title="Results",
     )
 
-    navigation = st.navigation([home_page, create_platforms_page, results_page])
+    navigation = st.navigation(
+        [home_page, create_platforms_page, create_sonobuoys_page, results_page]
+    )
 
     navigation.run()
 

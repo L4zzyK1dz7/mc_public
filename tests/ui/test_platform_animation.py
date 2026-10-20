@@ -4,6 +4,7 @@ from typing import cast
 from src.ui.plotting.platform_animation import (
     PlatformAnimationData,
     SimulationTiming,
+    SonobuoyDefinition,
     build_animation,
 )
 
@@ -302,5 +303,87 @@ def test_animation_renders_display_names():
     jump_buttons = [b for b in buttons if "Jump to detection" in b.label]
     assert len(jump_buttons) == 1
     assert "Defender One -> Intruder Alpha" in jump_buttons[0].label
+
+
+def test_build_animation_with_sonobuoys_and_detections():
+    platforms = {
+        "Red_1": cast(
+            PlatformAnimationData,
+            {
+                "display_name": "Target Red",
+                "positions": [
+                    {
+                        "platform_id": "Red_1",
+                        "team": "red",
+                        "timestamp_sec": 0.0,
+                        "pos_x_km": 10.0,
+                        "pos_y_km": 10.0,
+                        "waypoint_x_km": 10.0,
+                        "waypoint_y_km": 10.0,
+                        "detection_made": False,
+                        "target_platform_id": None,
+                        "detection_sensor_name": None,
+                        "detection_distance_km": None,
+                    },
+                    {
+                        "platform_id": "Red_1",
+                        "team": "red",
+                        "timestamp_sec": 60.0,
+                        "pos_x_km": 12.0,
+                        "pos_y_km": 10.0,
+                        "waypoint_x_km": 12.0,
+                        "waypoint_y_km": 10.0,
+                        "detection_made": False,
+                        "target_platform_id": None,
+                        "detection_sensor_name": None,
+                        "detection_distance_km": None,
+                    },
+                ],
+                "sensors": [],
+                "detections": [],
+            },
+        )
+    }
+    timing: SimulationTiming = {"time_limit_sec": 60.0, "world_timestep_sec": 60.0}
+    sonobuoys: list[SonobuoyDefinition] = [{"name": "Buoy_Alpha", "x_km": 50.0, "y_km": 50.0}]
+    sb_detections = [
+        {
+            "replication_id": 0,
+            "timestamp_minutes": 1.0,
+            "mode": "single_cycle",
+            "detecting_id": "Buoy_Alpha",
+            "target_platform_id": "Red_1",
+        }
+    ]
+
+    figure = build_animation(
+        platforms, timing, sonobuoys=sonobuoys, sonobuoy_detections=sb_detections
+    )
+
+    # Verify buoy trace is present as blue square
+    buoy_traces = [t for t in figure.data if t.name == "Buoy_Alpha"]
+    assert len(buoy_traces) == 1
+    assert buoy_traces[0].marker.symbol == "square"
+    assert buoy_traces[0].marker.color == "#08306b"
+    assert buoy_traces[0].x[0] == 50.0
+    assert buoy_traces[0].y[0] == 50.0
+
+    # Verify no coverage rings/wedges were drawn for buoy
+    assert not hasattr(buoy_traces[0], "fill") or buoy_traces[0].fill is None
+
+    # Verify frame data preserves trace count
+    assert len(figure.frames) >= 1
+    for frame in figure.frames:
+        assert len(frame.data) == len(figure.data)
+
+    # Verify detection jump button and annotation
+    buttons = figure.layout.updatemenus[0].buttons
+    jump_buttons = [b for b in buttons if "Jump to detection" in b.label]
+    assert len(jump_buttons) == 1
+    assert "Buoy_Alpha (single_cycle) -> Target Red" in jump_buttons[0].label
+
+    assert len(figure.layout.annotations) == 1
+    assert "Buoy_Alpha (single_cycle) -> Target Red" in figure.layout.annotations[0].text
+
 
 

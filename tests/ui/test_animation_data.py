@@ -200,3 +200,80 @@ def test_build_display_name_map_duplicate_and_blank(caplog):
     assert name_map["Blue_2"] == "Hunter"
     assert name_map["Red_1"] == "Red_1"  # falls back to platform id
     assert any("Duplicate platform display name" in rec.message for rec in caplog.records)
+
+
+def test_load_sonobuoys():
+    from src.schemas.sonobuoy import SonobuoyConfig
+    from src.ui.services.animation_data import load_sonobuoys
+
+    cfg_empty = ConfigData(
+        simulation=SimulationConfig(
+            replications=1, time_limit_sec=10.0, timestep_sec=1.0, seeds_file=False
+        ),
+        world=World(length=1000.0, height=1000.0),
+        platforms=[],
+    )
+    assert load_sonobuoys(cfg_empty) == []
+
+    buoy = SonobuoyConfig(
+        display_name="Buoy Alpha",
+        x_m=50000.0,
+        y_m=60000.0,
+        k=1,
+        n=1,
+        distance_m=[0.0, 1000.0],
+        pod=[1.0, 0.5],
+    )
+    cfg_with_buoy = ConfigData(
+        simulation=SimulationConfig(
+            replications=1, time_limit_sec=10.0, timestep_sec=1.0, seeds_file=False
+        ),
+        world=World(length=100000.0, height=100000.0),
+        platforms=[],
+        sonobuoys=[buoy],
+    )
+    defs = load_sonobuoys(cfg_with_buoy)
+    assert len(defs) == 1
+    assert defs[0]["name"] == "Buoy Alpha"
+    assert defs[0]["x_km"] == pytest.approx(50.0)
+    assert defs[0]["y_km"] == pytest.approx(60.0)
+
+
+def test_load_sonobuoy_detections(tmp_path: Path):
+    from src.ui.services.animation_data import load_sonobuoy_detections
+
+    # Missing file returns []
+    assert load_sonobuoy_detections(tmp_path, 0) == []
+
+    csv_path = tmp_path / "sonobuoy_detections.csv"
+    df = pd.DataFrame(
+        [
+            {
+                "replication_id": 0,
+                "timestamp_minutes": 1.5,
+                "mode": "single_cycle",
+                "detecting_id": "Buoy_1",
+                "target_platform_id": "Red_1",
+            },
+            {
+                "replication_id": 1,
+                "timestamp_minutes": 2.0,
+                "mode": "multi",
+                "detecting_id": "sonobuoy_field",
+                "target_platform_id": "Red_1",
+            },
+        ]
+    )
+    df.to_csv(csv_path, index=False)
+
+    rep0 = load_sonobuoy_detections(tmp_path, 0)
+    assert len(rep0) == 1
+    assert rep0[0]["mode"] == "single_cycle"
+    assert rep0[0]["detecting_id"] == "Buoy_1"
+
+    rep1 = load_sonobuoy_detections(tmp_path, 1)
+    assert len(rep1) == 1
+    assert rep1[0]["mode"] == "multi"
+
+    rep2 = load_sonobuoy_detections(tmp_path, 2)
+    assert len(rep2) == 0

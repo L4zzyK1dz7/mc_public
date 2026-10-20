@@ -17,8 +17,13 @@ import sys
 from argparse import ArgumentParser
 from pathlib import Path
 
+from src.monte_carlo.configuration.load_configuration import load_config_from_yaml
 from src.ui.plotting.platform_animation import build_animation
-from src.ui.services.animation_data import load_replication_animation_data
+from src.ui.services.animation_data import (
+    load_replication_animation_data,
+    load_sonobuoys,
+    load_sonobuoy_detections,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +70,19 @@ def main() -> None:
         logger.error("Could not load animation inputs: %s", error)
         sys.exit(1)
 
-    figure = build_animation(platforms, timing)
+    sonobuoys = None
+    config_path = args.run_folder / "input_data" / "config.yaml"
+    if config_path.exists():
+        try:
+            cfg = load_config_from_yaml(config_path)
+            sonobuoys = load_sonobuoys(cfg)
+        except Exception:
+            sonobuoys = None
+
+    sb_detections = load_sonobuoy_detections(args.run_folder, args.replication)
+    figure = build_animation(
+        platforms, timing, sonobuoys=sonobuoys, sonobuoy_detections=sb_detections
+    )
 
     if args.output is not None:
         figure.write_html(args.output)

@@ -11,72 +11,17 @@ import pandas as pd
 import streamlit as st
 
 from src.schemas.sensor import SensorFactory
+from src.ui.services.performance_table import (
+    _extract_valid_sensor_points,
+    _parse_sensor_csv,
+    _x_axis_label,
+)
 from src.ui.user_notifier import success
 
 if TYPE_CHECKING:
     from src.schemas.sensor import SensorConfig
 
 logger = logging.getLogger(__name__)
-
-
-def _x_axis_label(sensor_type: str) -> str:
-    """Return the label for the independent variable column depending on sensor type."""
-    if (sensor_type or "").lower() == "generic":
-        return "distance_m"
-    return "x_values"
-
-
-def _parse_sensor_csv(
-    sensor_table: pd.DataFrame,
-    sensor_type: str = "generic",
-) -> tuple[pd.DataFrame, Optional[str]]:
-    """Normalise a sensor CSV into x_values and pod columns."""
-    target_x_col = _x_axis_label(sensor_type)
-
-    for col_name in [target_x_col, "distance_m", "range_m", "x_values"]:
-        if {col_name, "pod"}.issubset(sensor_table.columns):
-            parsed = sensor_table[[col_name, "pod"]].copy()
-            parsed.columns = ["x_values", "pod"]
-            msg = (
-                f"CSV column '{col_name}' was mapped to {target_x_col}."
-                if col_name != target_x_col and col_name != "x_values"
-                else None
-            )
-            return parsed, msg
-
-    if len(sensor_table.columns) >= 2:
-        parsed_table = sensor_table.iloc[:, :2].copy()
-        parsed_table.columns = ["x_values", "pod"]
-        return parsed_table, f"CSV columns were auto-mapped to {target_x_col} and pod."
-
-    return (
-        pd.DataFrame(),
-        f"CSV must include {target_x_col} (or range_m/x_values) and pod columns, or at least two numeric columns.",
-    )
-
-
-def _extract_valid_sensor_points(
-    table: pd.DataFrame,
-) -> tuple[list[float], list[float], Optional[str]]:
-    """Normalise a table to x_values and pod lists and validate POD bounds."""
-    if table.empty or not {"x_values", "pod"}.issubset(table.columns):
-        return [], [], "No valid sensor rows found."
-
-    normalised = table[["x_values", "pod"]].copy()
-    normalised["x_values"] = pd.to_numeric(normalised["x_values"], errors="coerce")
-    normalised["pod"] = pd.to_numeric(normalised["pod"], errors="coerce")
-    normalised = normalised.dropna(subset=["x_values", "pod"])
-
-    if normalised.empty:
-        return [], [], "Provide at least one row with numeric values and pod values."
-
-    out_of_bounds = normalised[(normalised["pod"] < 0.0) | (normalised["pod"] > 1.0)]
-    if not out_of_bounds.empty:
-        return [], [], "All pod values must be between 0 and 1."
-
-    x_values = [float(value) for value in normalised["x_values"].tolist()]
-    pod_values = [float(value) for value in normalised["pod"].tolist()]
-    return x_values, pod_values, None
 
 
 def _build_sensor_summary(sensor_draft_list: list[SensorConfig]) -> pd.DataFrame:
@@ -100,6 +45,8 @@ def _build_sensor_summary(sensor_draft_list: list[SensorConfig]) -> pd.DataFrame
                 "name": draft.get("display_name", ""),
                 "interval_time_sec": draft.get("interval_time_sec", 1.0),
                 "type": draft.get("type", "").capitalize(),
+                "active_source": draft.get("active_source", False),
+                "collocated": draft.get("source_receiver_collocated", False),
                 "fov_start_deg": draft.get("fov_start_deg", None),
                 "fov_end_deg": draft.get("fov_end_deg", None),
                 "x_values": draft.get("x_values", []),
@@ -361,6 +308,27 @@ def _render_single_sensor_editor(index: int) -> None:
             fov_start_deg = None
             fov_end_deg = None
 
+        platform_team = st.session_state.get("platform_team", "")
+        if platform_team == "Blue":
+            active_source = st.checkbox(
+                "Active Source",
+                key=f"sensor_active_source_widget_{index}",
+                value=False,
+                help="Emits omnidirectional active acoustic pings.",
+            )
+            collocated = st.checkbox(
+                "Source/Receiver Collocated",
+                key=f"sensor_collocated_widget_{index}",
+                value=False,
+                disabled=not active_source,
+                help="Whether this platform also functions as a monostatic receiver for its own pings.",
+            )
+            if not active_source:
+                collocated = False
+        else:
+            active_source = False
+            collocated = False
+
         default_table = {
             "x_values": [0, 100, 200, 500, 1000],
             "pod": [1.0, 0.8, 0.6, 0.4, 0.2],
@@ -370,6 +338,8 @@ def _render_single_sensor_editor(index: int) -> None:
             "display_name": display_name,
             "sensor_type": sensor_type,
             "interval_time_sec": interval_time_sec,
+            "active_source": active_source,
+            "source_receiver_collocated": collocated,
             "fov_start_deg": fov_start_deg,
             "fov_end_deg": fov_end_deg,
             "x_values": default_table["x_values"],

@@ -11,6 +11,7 @@ from src.monte_carlo.configuration.load_configuration import (
     load_config_from_yaml,
     load_seeds,
 )
+from src.monte_carlo.detection_pipeline.active_pings import collect_active_pings
 from src.monte_carlo.detection_pipeline.pipeline import detect
 from src.monte_carlo.end_conditions import (
     EndCondition,
@@ -26,8 +27,16 @@ from src.monte_carlo.output.aggregate_results import aggregate_and_output_result
 from src.monte_carlo.output.file_utils import get_next_run_folder
 from src.monte_carlo.output.outcome_detection_manager import OutcomeDetectionManager
 from src.monte_carlo.output.outcome_position_manager import OutcomePositionManager
+from src.monte_carlo.sonobuoy.evaluation import evaluate_pings
+from src.monte_carlo.sonobuoy.fusion import evaluate_fusion
+from src.monte_carlo.sonobuoy.state import SonobuoyRuntimeState
 from src.monte_carlo.states.platform_states import initialise_platform_states
-from src.schemas.output import SimulationResult, SimulationResults
+from src.schemas.output import (
+    SimulationResult,
+    SimulationResults,
+    SonobuoyDetectionRecord,
+)
+
 
 if TYPE_CHECKING:
     from src.monte_carlo.detection_pipeline.events import DetectionEvent
@@ -85,6 +94,14 @@ def _execute_single_replication(
     end_condition: Optional[EndCondition] = None
     detected_target_ids: set[str] = set()  # For team detection.
 
+    sonobuoy_state = SonobuoyRuntimeState() if config_data.sonobuoys else None
+    data_fusion_req = (
+        config_data.sonobuoy_field.data_fusion_requirement
+        if config_data.sonobuoy_field is not None
+        else 1
+    )
+    sonobuoy_detection_records: list[SonobuoyDetectionRecord] = []
+
     # Main timestepping loop
     for step in range(max_steps):
         sim_time_sec += config_data.simulation.timestep_sec
@@ -112,6 +129,33 @@ def _execute_single_replication(
             )
 
             detection_manager.record_detection(detection, sim_time_sec)
+
+        # Multistatic sonobuoy evaluation if buoys are configured
+        sonobuoy_result = None
+        if config_data.sonobuoys and sonobuoy_state is not None:
+            pings = collect_active_pings(platform_states, sim_time_sec)
+            red_targets = [
+                p
+                for p in platform_states
+                if (p.team.value if hasattr(p.team, "value") else str(p.team)) == "Red"
+            ]
+            evaluate_pings(
+                pings=pings,
+                sonobuoys=config_data.sonobuoys,
+                target_platforms=red_targets,
+                state=sonobuoy_state,
+                random_gen=random_gen,
+            )
+            sonobuoy_result = evaluate_fusion(
+                sonobuoys=config_data.sonobuoys,
+                target_platforms=red_targets,
+                state=sonobuoy_state,
+                data_fusion_requirement=data_fusion_req,
+                timestamp_sec=sim_time_sec,
+            )
+            if sonobuoy_result is not None:
+                for event in sonobuoy_result.events:
+                    detected_target_ids.add(event.target_platform_id)
 
         # Group both teams; either team can be the target of a team detection.
         teams: dict[str, list] = platforms_by_team(platform_states)  # Blue and Red
@@ -156,6 +200,7 @@ def _execute_single_replication(
                 target_has_escaped(target=target, world=config_data.world)
                 for target in target_states
             ),
+            sonobuoy_fusion=sonobuoy_result,
         )
 
         end_condition: Optional[EndCondition] = check_end_conditions(
@@ -173,6 +218,23 @@ def _execute_single_replication(
             end_condition.timestamp_sec,
         )
 
+        if end_condition.condition in (
+            "sonobuoy_single_cycle_detection",
+            "sonobuoy_multi_detection",
+            "sonobuoy_single_detection",
+        ):
+            for sb_event in end_condition.sonobuoy_events:
+                detection_manager.record_sonobuoy_detection(sb_event)
+                sonobuoy_detection_records.append(
+                    {
+                        "replication_id": outcome_manager.replication_id,
+                        "timestamp_minutes": sim_time_sec / 60.0,
+                        "mode": sb_event.mode,
+                        "detecting_id": sb_event.detecting_id,
+                        "target_platform_id": sb_event.target_platform_id,
+                    }
+                )
+
         break  # Exit the main timestepping loop once an end condition is reached
 
     assert end_condition is not None
@@ -184,7 +246,9 @@ def _execute_single_replication(
         "end_condition": end_condition.condition,
         "platform_position_events": outcome_manager.events,
         "detection_outcomes": detection_manager.rows,
+        "sonobuoy_detections": sonobuoy_detection_records,
     }
+
     logger.info(
         "Simulation Result: %s, End Condition: %s",
         simulation_result.get("result"),
@@ -309,7 +373,12 @@ def run_simulation(
     )
 
     # === 4. Aggregate and Output the simulation results ===
-    aggregate_and_output_results(simulation_results, run_output_dir)
+    aggregate_and_output_results(
+        simulation_results,
+        run_output_dir,
+        has_sonobuoys=bool(config_data.sonobuoys),
+    )
+
 
     logger.info("Monte Carlo completed successfully.")
 

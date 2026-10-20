@@ -27,4 +27,7 @@ def iter_platform_sensors(
             continue
 
         for sensor in platform.sensors:
+            if not getattr(sensor, "can_detect", True):
+                continue
             yield platform, sensor, target_platforms
+

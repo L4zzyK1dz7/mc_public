@@ -114,7 +114,10 @@ class PlatformState:
 
     # Per-sensor evaluation history keyed by id(sensor) e.g. id(sensor): SensorRuntimeState
     sensor_states: dict[int, SensorRuntimeState] = field(default_factory=dict)
+    # Per-sensor active ping timing keyed by id(sensor): next_ping_time_sec
+    ping_states: dict[int, float] = field(default_factory=dict)
     neutralized: bool = False
+
 
     # -------------------------------------------------------------------
     # Non changeable attributes (add setters if change is required)

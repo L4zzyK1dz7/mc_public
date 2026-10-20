@@ -18,7 +18,7 @@ from src.schemas.movement import (
     Waypoint,
     IntruderEndCondition,
 )
-from src.schemas.sensor import GenericSensorConfig, SpecificSensorConfig, SensorConfig
+from src.schemas.sensor import GenericSensorConfig
 from src.schemas.simulation import ConfigData, SimulationConfig, World
 from src.monte_carlo.configuration.load_configuration import (
     load_config_from_yaml,
@@ -494,3 +494,171 @@ def test_sch_14_missing_configuration_files(tmp_path: Path):
     non_existent_seeds = tmp_path / "seeds.txt"
     with pytest.raises(FileNotFoundError):
         load_seeds(non_existent_seeds, replications=5)
+
+
+# ==============================================================================
+# SCH-15: Sensor active multistatic flags and detection capabilities
+# ==============================================================================
+def test_sch_15_sensor_flags_and_can_detect():
+    """Verify active_source and collocated flags set can_detect appropriately."""
+    # Default: active=False, collocated=False -> can_detect=True
+    s_default = GenericSensorConfig(
+        display_name="Passive Radar",
+        interval_time_sec=1.0,
+        x_values=[100.0],
+        pod=[0.8],
+        k=1,
+        n=1,
+    )
+    assert not s_default.active_source
+    assert not s_default.source_receiver_collocated
+    assert s_default.can_detect is True
+
+    # Active source + collocated -> can_detect=True
+    s_collocated = GenericSensorConfig(
+        display_name="Collocated Sonar",
+        interval_time_sec=1.0,
+        x_values=[100.0],
+        pod=[0.8],
+        k=1,
+        n=1,
+        active_source=True,
+        source_receiver_collocated=True,
+    )
+    assert s_collocated.active_source is True
+    assert s_collocated.source_receiver_collocated is True
+    assert s_collocated.can_detect is True
+
+    # Active source ping-only -> can_detect=False
+    s_pinger = GenericSensorConfig(
+        display_name="Active Pinger Only",
+        interval_time_sec=2.0,
+        x_values=[100.0],
+        pod=[0.8],
+        k=1,
+        n=1,
+        active_source=True,
+        source_receiver_collocated=False,
+    )
+    assert s_pinger.active_source is True
+    assert s_pinger.source_receiver_collocated is False
+    assert s_pinger.can_detect is False
+
+    # Invalid: collocated=True with active_source=False
+    with pytest.raises(ValidationError, match="source_receiver_collocated cannot be True when active_source is False"):
+        GenericSensorConfig(
+            display_name="Invalid Sensor",
+            interval_time_sec=1.0,
+            x_values=[100.0],
+            pod=[0.8],
+            k=1,
+            n=1,
+            active_source=False,
+            source_receiver_collocated=True,
+        )
+
+
+def test_sch_15_active_source_allowed_only_on_blue_platform():
+    """Verify active source sensors cannot be assigned to Red platforms."""
+    pinger = GenericSensorConfig(
+        display_name="Active Pinger",
+        interval_time_sec=2.0,
+        x_values=[100.0],
+        pod=[0.8],
+        k=1,
+        n=1,
+        active_source=True,
+        source_receiver_collocated=False,
+    )
+
+    # Allowed on Blue
+    PlatformConfig(
+        platform_config_folder="blue_1",
+        display_name="Blue Pinger Unit",
+        team="Blue",
+        speed_mps=15.0,
+        movement_type=RandomWalkMovement(),
+        sensors=[pinger],
+    )
+
+    # Rejected on Red
+    with pytest.raises(ValidationError, match="Active source sensors are only permitted on Blue platforms"):
+        PlatformConfig(
+            platform_config_folder="red_1",
+            display_name="Red Pinger Unit",
+            team="Red",
+            speed_mps=15.0,
+            movement_type=RandomWalkMovement(),
+            sensors=[pinger],
+        )
+
+
+def test_sch_15_sensor_csv_bool_parsing_and_round_trip(tmp_path: Path):
+    """Verify strict boolean parsing in sensor_loader and CSV round-trip."""
+    from src.monte_carlo.configuration.sensor_loader import _load_sensor, _parse_sensor_csv
+    from src.ui.services.create_yaml import create_sensor_file
+
+    platform_dir = tmp_path / "platforms" / "Blue" / "blue_1"
+    (platform_dir / "sensors" / "generic").mkdir(parents=True, exist_ok=True)
+
+    original_sensor = GenericSensorConfig(
+        display_name="Hull Sonar",
+        interval_time_sec=2.5,
+        fov_start_deg=30.0,
+        fov_end_deg=150.0,
+        x_values=[500.0, 1000.0],
+        pod=[0.9, 0.5],
+        k=2,
+        n=3,
+        active_source=True,
+        source_receiver_collocated=True,
+    )
+
+    # Write using create_sensor_file
+    success = create_sensor_file(original_sensor, platform_dir)
+    assert success is True
+
+    csv_file = platform_dir / "sensors" / "generic" / "Hull Sonar.csv"
+    assert csv_file.exists()
+
+    # Load back
+    loaded = _load_sensor(csv_file)
+    assert loaded.display_name == original_sensor.display_name
+    assert loaded.interval_time_sec == 2.5
+    assert loaded.active_source is True
+    assert loaded.source_receiver_collocated is True
+    assert loaded.can_detect is True
+
+    # Bad path: invalid bool string in sensor CSV
+    bad_csv = tmp_path / "bad_sensor.csv"
+    bad_csv.write_text(
+        "# display_name: Bad\n"
+        "# type: generic\n"
+        "# interval_time_sec: 1.0\n"
+        "# k: 1\n"
+        "# n: 1\n"
+        "# active_source: maybe\n\n"
+        "distance_m,pod\n"
+        "100,0.5\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="Invalid boolean value for 'active_source'"):
+        _parse_sensor_csv(bad_csv)
+
+    # Legacy CSV without flags defaults to False
+    legacy_csv = tmp_path / "legacy_sensor.csv"
+    legacy_csv.write_text(
+        "# display_name: Legacy\n"
+        "# type: generic\n"
+        "# interval_time_sec: 1.0\n"
+        "# k: 1\n"
+        "# n: 1\n\n"
+        "distance_m,pod\n"
+        "100,0.5\n",
+        encoding="utf-8",
+    )
+    legacy_sensor = _load_sensor(legacy_csv)
+    assert legacy_sensor.active_source is False
+    assert legacy_sensor.source_receiver_collocated is False
+    assert legacy_sensor.can_detect is True
+

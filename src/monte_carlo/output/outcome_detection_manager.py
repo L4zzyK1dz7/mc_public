@@ -14,8 +14,10 @@ from src.monte_carlo.detection_pipeline.pairs import iter_platform_sensors
 
 if TYPE_CHECKING:
     from src.monte_carlo.detection_pipeline.events import DetectionEvent
+    from src.monte_carlo.sonobuoy.events import SonobuoyDetectionEvent
     from src.monte_carlo.states.platform_states import PlatformState
     from src.schemas.output import DetectionOutcomeEvent
+
 
 
 class OutcomeDetectionManager:
@@ -68,7 +70,28 @@ class OutcomeDetectionManager:
             "end_condition": None,
         }
 
+    def record_sonobuoy_detection(
+        self, event: SonobuoyDetectionEvent
+    ) -> None:
+        """Record a detection outcome row for a sonobuoy detection event."""
+        key = (
+            event.detecting_id,
+            event.mode,
+            event.target_platform_id,
+        )
+        self._rows[key] = {
+            "replication_id": self.replication_id,
+            "detecting_platform_id": event.detecting_id,
+            "sensor_name": event.mode,
+            "target_platform_id": event.target_platform_id,
+            "detection_outcome": True,
+            "detection_distance_m": event.distance_m,
+            "detection_timestamp_sec": event.timestamp_sec,
+            "end_condition": None,
+        }
+
     def set_end_condition(self, end_condition: str) -> None:
+
         """Stamp every seeded row with the replication's terminal condition, so summary
         stats can show why a replication ended even when no detection occurred.
         """

@@ -45,6 +45,10 @@ def establish_session_state() -> None:
         "sensor_draft_list_final": [],  # Current sensor draft
         "sensor_edit_index": 0,
         "sensor_save_message": "",
+        # Sonobuoy creation state
+        "sonobuoy_draft_list": [],
+        "sonobuoy_edit_index": 0,
+        "data_fusion_requirement": 1,
     }
 
     for key, default_value in session_defaults.items():

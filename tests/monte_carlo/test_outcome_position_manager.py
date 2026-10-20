@@ -5,7 +5,6 @@ Verification of position sampling, snapshots, and event recordings.
 
 from __future__ import annotations
 
-import pytest
 
 from src.monte_carlo.detection_pipeline.events import DetectionEvent
 from src.monte_carlo.output.outcome_position_manager import OutcomePositionManager

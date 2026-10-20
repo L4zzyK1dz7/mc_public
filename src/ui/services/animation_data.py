@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Mapping, Optional
+from typing import Any, Mapping, Optional
 
 import pandas as pd
 
@@ -23,6 +23,7 @@ from src.ui.plotting.platform_animation import (
     PlatformPosition,
     SensorDefinition,
     SimulationTiming,
+    SonobuoyDefinition,
 )
 
 logger = logging.getLogger(__name__)
@@ -251,3 +252,37 @@ def load_replication_animation_data(
     )
     timing["end_time_sec"] = compute_replication_end_sec(platforms)
     return platforms, timing
+
+
+def load_sonobuoys(config_data: ConfigData) -> list[SonobuoyDefinition]:
+    """Extract sonobuoy definitions (name, x_km, y_km) from a validated ConfigData."""
+    if not getattr(config_data, "sonobuoys", None):
+        return []
+    return [
+        {
+            "name": buoy.display_name,
+            "x_km": float(buoy.x_m) / 1000.0,
+            "y_km": float(buoy.y_m) / 1000.0,
+        }
+        for buoy in config_data.sonobuoys
+    ]
+
+
+def load_sonobuoy_detections(
+    run_folder: Path, replication_id: int
+) -> list[dict[str, Any]]:
+    """Load sonobuoy detection events from sonobuoy_detections.csv if present."""
+    csv_path = run_folder / "sonobuoy_detections.csv"
+    if not csv_path.exists():
+        return []
+    try:
+        df = pd.read_csv(csv_path)
+        if df.empty or "replication_id" not in df.columns:
+            return []
+        rep_df = df[df["replication_id"] == replication_id]
+        return rep_df.to_dict(orient="records")
+    except Exception as exc:
+        logger.warning(
+            "Could not read sonobuoy_detections.csv from %s: %s", run_folder, exc
+        )
+        return []

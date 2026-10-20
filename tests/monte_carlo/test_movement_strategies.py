@@ -17,8 +17,6 @@ from src.monte_carlo.states.movement_state import (
     RandomWalkStrategy,
     UserDefinedWaypointsState,
     UserDefinedWaypointsStrategy,
-    create_movement_state,
-    create_movement_strategy,
 )
 from src.schemas.movement import (
     BarrierPatrollerMovement,

@@ -7,7 +7,7 @@ it can be reused by both a Streamlit page and a plain CLI script.
 
 from __future__ import annotations
 
-from typing import Mapping, Optional, TypedDict, cast
+from typing import Any, Mapping, Optional, TypedDict, cast
 
 import numpy as np
 import plotly.graph_objects as go
@@ -51,6 +51,12 @@ class SensorDefinition(TypedDict):
     fov_start_deg: float
     fov_end_deg: float
     range_km: float
+
+
+class SonobuoyDefinition(TypedDict):
+    name: str
+    x_km: float
+    y_km: float
 
 
 class PlatformAnimationData(TypedDict, total=False):
@@ -144,12 +150,29 @@ def _rgba_color(hex_color: str, alpha: float) -> str:
 def build_animation(
     platforms: Mapping[str, PlatformAnimationData],
     timing: SimulationTiming,
+    sonobuoys: Optional[list[SonobuoyDefinition]] = None,
+    sonobuoy_detections: Optional[list[dict[str, Any]]] = None,
 ) -> go.Figure:
     """Build an animated Plotly figure for one replication's already-loaded platform data."""
-    detection_events = sorted(
-        [event for platform in platforms.values() for event in platform["detections"]],
-        key=lambda event: event["timestamp_sec"],
-    )
+    detection_events = [
+        event for platform in platforms.values() for event in platform["detections"]
+    ]
+    if sonobuoy_detections:
+        for sb_det in sonobuoy_detections:
+            timestamp_sec = float(sb_det["timestamp_minutes"]) * 60.0
+            mode = sb_det.get("mode", "single_cycle")
+            detecting_id = sb_det.get("detecting_id", "sonobuoy")
+            target_id = str(sb_det["target_platform_id"])
+            detection_events.append(
+                {
+                    "timestamp_sec": timestamp_sec,
+                    "detecting_platform_id": f"{detecting_id} ({mode})",
+                    "target_platform_id": target_id,
+                    "sensor_name": mode,
+                    "distance_m": None,
+                }
+            )
+    detection_events.sort(key=lambda event: event["timestamp_sec"])
     end_time_sec = float(timing.get("end_time_sec") or timing["time_limit_sec"])
 
     regular_frame_times = np.arange(
@@ -181,12 +204,26 @@ def build_animation(
     )
 
     figure = go.Figure()
-    trace_specs: list[tuple[str, str, Optional[SensorDefinition]]] = []
+    trace_specs: list[tuple[str, str, Any]] = []
     detection_targets = {
-        event["target_platform_id"]
-        for platform in platforms.values()
-        for event in platform["detections"]
+        event["target_platform_id"] for event in detection_events
     }
+
+    # Add sonobuoys as static blue squares
+    if sonobuoys:
+        for buoy in sonobuoys:
+            trace_specs.append(("sonobuoy", buoy["name"], buoy))
+            figure.add_trace(
+                go.Scatter(
+                    x=[buoy["x_km"]],
+                    y=[buoy["y_km"]],
+                    mode="markers",
+                    name=buoy["name"],
+                    marker={"color": "#08306b", "size": 12, "symbol": "square"},
+                    hoverinfo="text",
+                    hovertext=buoy["name"],
+                )
+            )
 
     for platform_id, platform in platforms.items():
         initial = _position_at_time(platform, 0.0)
@@ -258,7 +295,16 @@ def build_animation(
     frames = []
     for timestamp_sec in frame_times:
         frame_data = []
-        for trace_type, platform_id, sensor in trace_specs:
+        for trace_type, platform_id, sensor_or_extra in trace_specs:
+            if trace_type == "sonobuoy":
+                frame_data.append(
+                    go.Scatter(
+                        x=[sensor_or_extra["x_km"]],
+                        y=[sensor_or_extra["y_km"]],
+                    )
+                )
+                continue
+
             platform = platforms[platform_id]
             current = _position_at_time(platform, float(timestamp_sec))
             if trace_type == "trail":
@@ -280,21 +326,20 @@ def build_animation(
                     go.Scatter(x=[current["pos_x_km"]], y=[current["pos_y_km"]])
                 )
             elif trace_type == "sensor":
-                assert sensor is not None
+                assert sensor_or_extra is not None
                 sector_x, sector_y = _sector_points(
                     current["pos_x_km"],
                     current["pos_y_km"],
-                    sensor["fov_start_deg"],
-                    sensor["fov_end_deg"],
-                    sensor["range_km"],
+                    sensor_or_extra["fov_start_deg"],
+                    sensor_or_extra["fov_end_deg"],
+                    sensor_or_extra["range_km"],
                     heading_deg=_platform_heading_deg(current),
                 )
                 frame_data.append(go.Scatter(x=sector_x, y=sector_y))
             else:
                 matching_events = [
                     event
-                    for source_platform in platforms.values()
-                    for event in source_platform["detections"]
+                    for event in detection_events
                     if event["target_platform_id"] in (platform_id, platform.get("display_name", platform_id))
                     and event["timestamp_sec"] <= timestamp_sec
                 ]
@@ -322,14 +367,19 @@ def build_animation(
         for platform in platforms.values()
         for position in platform["positions"]
     ]
+    buoy_x = [b["x_km"] for b in (sonobuoys or [])]
+    buoy_y = [b["y_km"] for b in (sonobuoys or [])]
+    all_x = [position["pos_x_km"] for position in all_positions] + buoy_x
+    all_y = [position["pos_y_km"] for position in all_positions] + buoy_y
+
     all_sensors = [
         sensor for platform in platforms.values() for sensor in platform["sensors"]
     ]
     maximum_range = max([sensor["range_km"] for sensor in all_sensors] + [0.0])
-    x_min = min(position["pos_x_km"] for position in all_positions) - maximum_range
-    x_max = max(position["pos_x_km"] for position in all_positions) + maximum_range
-    y_min = min(position["pos_y_km"] for position in all_positions) - maximum_range
-    y_max = max(position["pos_y_km"] for position in all_positions) + maximum_range
+    x_min = (min(all_x) if all_x else 0.0) - maximum_range
+    x_max = (max(all_x) if all_x else 100.0) + maximum_range
+    y_min = (min(all_y) if all_y else 0.0) - maximum_range
+    y_max = (max(all_y) if all_y else 100.0) + maximum_range
 
     def _resolve_name(pid: str) -> str:
         return platforms.get(pid, {}).get("display_name", pid)

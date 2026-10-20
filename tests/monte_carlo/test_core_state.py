@@ -20,7 +20,6 @@ from src.schemas.movement import (
     Waypoint,
 )
 from src.schemas.platform import PlatformConfig, Team
-from src.schemas.sensor import GenericSensorConfig
 from src.schemas.simulation import ConfigData, SimulationConfig, World
 
 

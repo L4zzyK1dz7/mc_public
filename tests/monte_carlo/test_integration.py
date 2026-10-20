@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from pathlib import Path
 import numpy as np
-import pytest
 import yaml
 
 from src.monte_carlo.monte_carlo import (
@@ -19,7 +18,7 @@ from src.monte_carlo.output.aggregate_results import aggregate_and_output_result
 from src.monte_carlo.output.outcome_detection_manager import OutcomeDetectionManager
 from src.monte_carlo.output.outcome_position_manager import OutcomePositionManager
 from src.monte_carlo.configuration.load_configuration import load_seeds
-from src.schemas.movement import IntruderSearchMovement, RandomWalkMovement
+from src.schemas.movement import RandomWalkMovement
 from src.schemas.platform import PlatformConfig, Team
 from src.schemas.sensor import GenericSensorConfig
 from src.schemas.simulation import ConfigData, SimulationConfig, World
@@ -256,3 +255,150 @@ def test_int_06_system_level_simulation_baseline(tmp_path: Path):
     assert (output_dir / "seeds.txt").exists()
     assert (output_dir / "summary_stats.csv").exists()
     assert (output_dir / "raw_positions.csv").exists()
+
+
+# ==============================================================================
+# INT-07: Multistatic sonobuoy scenario end-to-end simulation
+# ==============================================================================
+def test_int_07_multistatic_sonobuoy_simulation(tmp_path: Path):
+    """Verify run_simulation with 1 Blue active pinger, 3 sonobuoys, and 1 Red platform."""
+    scenario_dir = tmp_path / "scenario_sonobuoy"
+    scenario_dir.mkdir()
+
+    sonar_dir = (
+        scenario_dir
+        / "platforms"
+        / "Blue"
+        / "Blue Pinger"
+        / "sensors"
+        / "sonar"
+    )
+    sonar_dir.mkdir(parents=True)
+
+    sonar_csv = sonar_dir / "sonar.csv"
+    with open(sonar_csv, "w", encoding="utf-8") as f:
+        f.write("# display_name: Active Sonar\n")
+        f.write("# type: generic\n")
+        f.write("# interval_time_sec: 1.0\n")
+        f.write("# active_source: True\n")
+        f.write("# source_receiver_collocated: False\n")
+        f.write("# fov_start_deg: 0.0\n")
+        f.write("# fov_end_deg: 360.0\n")
+        f.write("# k: 1\n")
+        f.write("# n: 1\n")
+        f.write("distance_m,pod\n")
+        f.write("0.0,1.0\n")
+        f.write("1000.0,1.0\n")
+
+    sonobuoys_dir = scenario_dir / "sonobuoys"
+    sonobuoys_dir.mkdir()
+
+    for idx, (bx, by) in enumerate([(500.0, 500.0), (510.0, 500.0), (520.0, 500.0)], start=1):
+        buoy_csv = sonobuoys_dir / f"Buoy {idx}.csv"
+        with open(buoy_csv, "w", encoding="utf-8") as f:
+            f.write(f"# display_name: Buoy {idx}\n")
+            f.write(f"# x_m: {bx}\n")
+            f.write(f"# y_m: {by}\n")
+            f.write("# k: 1\n")
+            f.write("# n: 1\n")
+            f.write("# evaluation_modes: single,multi,single_cycle\n")
+            f.write("distance_m,pod\n")
+            f.write("0.0,1.0\n")
+            f.write("10000.0,1.0\n")
+
+    config_dict = {
+        "simulation": {
+            "replications": 2,
+            "time_limit_sec": 10.0,
+            "timestep_sec": 1.0,
+            "seeds_file": False,
+            "detection_end_condition": "initial_detection",
+        },
+        "world": {
+            "origin_x": 0.0,
+            "origin_y": 0.0,
+            "length": 1000.0,
+            "height": 1000.0,
+        },
+        "platforms": [
+            {
+                "platform_config_folder": "blue_pinger",
+                "display_name": "Blue Pinger",
+                "team": "Blue",
+                "speed_mps": 0.0,
+                "movement_type": {"type": "random_walk"},
+                "neutralised_platform_behaviour": "stop",
+                "sensors": ["sonar"],
+            },
+            {
+                "platform_config_folder": "red_target",
+                "display_name": "Red Target",
+                "team": "Red",
+                "speed_mps": 5.0,
+                "movement_type": {
+                    "type": "intruder_search",
+                    "start_distance_m": 0.0,
+                    "end_condition": "cross_world",
+                },
+                "neutralised_platform_behaviour": "continue",
+                "sensors": [],
+            },
+        ],
+        "sonobuoys": [
+            {
+                "display_name": "Buoy 1",
+                "x_m": 500.0,
+                "y_m": 500.0,
+                "k": 1,
+                "n": 1,
+                "evaluation_modes": ["single", "multi", "single_cycle"],
+            },
+            {
+                "display_name": "Buoy 2",
+                "x_m": 510.0,
+                "y_m": 500.0,
+                "k": 1,
+                "n": 1,
+                "evaluation_modes": ["single", "multi", "single_cycle"],
+            },
+            {
+                "display_name": "Buoy 3",
+                "x_m": 520.0,
+                "y_m": 500.0,
+                "k": 1,
+                "n": 1,
+                "evaluation_modes": ["single", "multi", "single_cycle"],
+            },
+        ],
+        "sonobuoy_field": {
+            "data_fusion_requirement": 2,
+        },
+    }
+
+    config_path = scenario_dir / "config.yaml"
+    with open(config_path, "w", encoding="utf-8") as f:
+        yaml.dump(config_dict, f)
+
+    output_dir = tmp_path / "sonobuoy_outcomes"
+    return_code = run_simulation(config_path, output_dir=output_dir)
+
+    assert return_code == 0
+    assert (output_dir / "seeds.txt").exists()
+    assert (output_dir / "summary_stats.csv").exists()
+    assert (output_dir / "raw_positions.csv").exists()
+    assert (output_dir / "sonobuoy_detections.csv").exists()
+
+    # Verify sonobuoy_detections.csv contents
+    import pandas as pd
+    det_df = pd.read_csv(output_dir / "sonobuoy_detections.csv")
+    assert not det_df.empty
+    assert set(det_df.columns) == {
+        "replication_id",
+        "timestamp_minutes",
+        "mode",
+        "detecting_id",
+        "target_platform_id",
+    }
+    # Highest priority is single_cycle
+    assert "single_cycle" in det_df["mode"].values
+

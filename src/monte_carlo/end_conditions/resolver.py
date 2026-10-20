@@ -51,6 +51,21 @@ def check_end_conditions(
             detection=facts.detection,
         )
 
+    if facts.sonobuoy_fusion is not None:
+        fusion = facts.sonobuoy_fusion
+        cond_map = {
+            "single_cycle": "sonobuoy_single_cycle_detection",
+            "multi": "sonobuoy_multi_detection",
+            "single": "sonobuoy_single_detection",
+        }
+        condition_name = cond_map.get(fusion.mode, "sonobuoy_single_detection")
+        return EndCondition(
+            result="detected",
+            condition=condition_name,  # type: ignore[arg-type]
+            timestamp_sec=current_time_sec,
+            sonobuoy_events=fusion.events,
+        )
+
     if current_step >= max_steps - 1:
         return EndCondition(
             result="not_detected",
@@ -59,3 +74,4 @@ def check_end_conditions(
         )
 
     return None
+

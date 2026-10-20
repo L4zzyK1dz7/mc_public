@@ -13,15 +13,41 @@ if TYPE_CHECKING:
     from src.schemas.platform import PlatformConfig
     from src.schemas.sensor import GenericSensorConfig, SpecificSensorConfig
     from src.schemas.simulation import ConfigData
+    from src.schemas.sonobuoy import SonobuoyConfig
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+
+def create_sonobuoy_file(
+    sonobuoy: SonobuoyConfig,
+    sonobuoys_dir: Path,
+) -> bool:
+    """Create a sonobuoy CSV file with metadata header comments and distance_m,pod table."""
+    sonobuoys_dir.mkdir(parents=True, exist_ok=True)
+    sonobuoy_file = sonobuoys_dir / f"{sonobuoy.display_name}.csv"
+    try:
+        with open(sonobuoy_file, "w", newline="", encoding="utf-8") as f:
+            f.write(f"# display_name: {sonobuoy.display_name}\n")
+            f.write(f"# x_m: {sonobuoy.x_m}\n")
+            f.write(f"# y_m: {sonobuoy.y_m}\n")
+            f.write(f"# k: {sonobuoy.k}\n")
+            f.write(f"# n: {sonobuoy.n}\n")
+            f.write(f"# evaluation_modes: {','.join(sonobuoy.evaluation_modes)}\n\n")
+            writer = csv.writer(f)
+            writer.writerow(["distance_m", "pod"])
+            writer.writerows(zip(sonobuoy.distance_m, sonobuoy.pod))
+        return True
+    except Exception as e:
+        logger.error("Failed to create sonobuoy file %s: %s", sonobuoy_file, e)
+        return False
 
 
 def create_sensor_file(
     sensor: Union[GenericSensorConfig, SpecificSensorConfig],
     platform_path: Path,
 ) -> bool:
+
     """
     Create a sensor file for the given sensor within the specified platform directory.
     The column for the table could range_m or distance_m or some other measurement depending on the sensor type.
@@ -189,6 +215,15 @@ def create_config_yaml(
     )  # hours to seconds
     config_data.world.height = float(config_data.world.height * 1000)  # km to meters
     config_data.world.length = float(config_data.world.length * 1000)  # km to meters
+    for buoy in config_data.sonobuoys:
+        buoy.x_m = float(buoy.x_m * 1000)  # km to meters
+        buoy.y_m = float(buoy.y_m * 1000)  # km to meters
+
+    # Write sonobuoy CSV files if any sonobuoys are configured
+    if config_data.sonobuoys:
+        sonobuoys_dir = input_data_path / "sonobuoys"
+        for buoy in config_data.sonobuoys:
+            create_sonobuoy_file(buoy, sonobuoys_dir)
 
     # Convert dataclass to dictionary
     cfg_dict = config_data.model_dump(
@@ -201,10 +236,16 @@ def create_config_yaml(
     for platform in cfg_dict.get("platforms", []):
         if "sensors" in platform:
             platform["sensors"] = [sensor["type"] for sensor in platform["sensors"]]
-            print(platform["sensors"])
+            logger.debug("Platform sensors: %s", platform["sensors"])
+
+    # For sonobuoys, remove the distance_m and pod tables from config.yaml (stored in CSV)
+    for buoy in cfg_dict.get("sonobuoys", []):
+        buoy.pop("distance_m", None)
+        buoy.pop("pod", None)
 
     # Write the dictionary to a YAML file
     with open(output_path, "w") as yaml_file:
         yaml.dump(cfg_dict, yaml_file, default_flow_style=False)
 
     return cfg_dict
+

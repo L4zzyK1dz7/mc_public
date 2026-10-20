@@ -6,7 +6,6 @@ Verification of termination conditions, facts generation, and priority resolutio
 from __future__ import annotations
 
 from types import SimpleNamespace
-import pytest
 
 from src.monte_carlo.detection_pipeline.events import DetectionEvent
 from src.monte_carlo.end_conditions import EndConditionFacts, check_end_conditions
@@ -201,3 +200,82 @@ def test_platforms_grouped_by_team_helper():
     grouped = platforms_by_team([blue, red])
     assert grouped["Blue"] == [blue]
     assert grouped["Red"] == [red]
+
+
+# ==============================================================================
+# END-06: Multistatic sonobuoy end conditions and priority
+# ==============================================================================
+def test_end_06_sonobuoy_end_conditions_and_priority():
+    """Verify sonobuoy end conditions and priority ranking."""
+    from src.monte_carlo.sonobuoy.events import SonobuoyDetectionEvent, SonobuoyFusionResult
+
+    sb_event = SonobuoyDetectionEvent(
+        timestamp_sec=30.0,
+        detecting_id="sonobuoy_field",
+        target_platform_id="Red_1",
+        mode="single_cycle",
+    )
+
+    # 1. Single cycle resolution
+    facts_sc = EndConditionFacts(
+        sonobuoy_fusion=SonobuoyFusionResult(mode="single_cycle", events=(sb_event,)),
+    )
+    res_sc = check_end_conditions(
+        current_time_sec=30.0, current_step=29, max_steps=100, facts=facts_sc
+    )
+    assert res_sc is not None
+    assert res_sc.condition == "sonobuoy_single_cycle_detection"
+    assert res_sc.result == "detected"
+    assert res_sc.sonobuoy_events == (sb_event,)
+
+    # 2. Multi-buoy resolution
+    sb_multi_event = SonobuoyDetectionEvent(
+        timestamp_sec=30.0,
+        detecting_id="sonobuoy_field",
+        target_platform_id="Red_1",
+        mode="multi",
+    )
+    facts_multi = EndConditionFacts(
+        sonobuoy_fusion=SonobuoyFusionResult(mode="multi", events=(sb_multi_event,)),
+    )
+    res_multi = check_end_conditions(
+        current_time_sec=30.0, current_step=29, max_steps=100, facts=facts_multi
+    )
+    assert res_multi is not None
+    assert res_multi.condition == "sonobuoy_multi_detection"
+
+    # 3. Single buoy resolution
+    sb_single_event = SonobuoyDetectionEvent(
+        timestamp_sec=30.0,
+        detecting_id="Buoy_1",
+        target_platform_id="Red_1",
+        mode="single",
+    )
+    facts_single = EndConditionFacts(
+        sonobuoy_fusion=SonobuoyFusionResult(mode="single", events=(sb_single_event,)),
+    )
+    res_single = check_end_conditions(
+        current_time_sec=30.0, current_step=29, max_steps=100, facts=facts_single
+    )
+    assert res_single is not None
+    assert res_single.condition == "sonobuoy_single_detection"
+
+    # 4. Platform detection beats sonobuoy detection
+    plat_det = DetectionEvent("Blue_1", "Red_1", "generic", 50.0)
+    facts_plat_and_sb = EndConditionFacts(
+        detection=plat_det,
+        sonobuoy_fusion=SonobuoyFusionResult(mode="single_cycle", events=(sb_event,)),
+    )
+    res_plat_wins = check_end_conditions(
+        current_time_sec=30.0, current_step=29, max_steps=100, facts=facts_plat_and_sb
+    )
+    assert res_plat_wins is not None
+    assert res_plat_wins.condition == "detection"
+
+    # 5. Sonobuoy detection beats time limit
+    res_sb_beats_time = check_end_conditions(
+        current_time_sec=100.0, current_step=99, max_steps=100, facts=facts_sc
+    )
+    assert res_sb_beats_time is not None
+    assert res_sb_beats_time.condition == "sonobuoy_single_cycle_detection"
+

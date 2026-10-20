@@ -198,7 +198,11 @@ CANONICAL_END_CONDITIONS: list[str] = [
     "counter_detection",
     "blue_team_detection",
     "red_team_detection",
+    "sonobuoy_single_cycle_detection",
+    "sonobuoy_multi_detection",
+    "sonobuoy_single_detection",
 ]
+
 
 
 def generate_table_4(

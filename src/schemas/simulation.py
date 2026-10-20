@@ -1,10 +1,15 @@
 from __future__ import annotations
 
-from typing import Literal
+import logging
+from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+
+from pydantic import BaseModel, Field, model_validator
 
 from src.schemas.platform import PlatformConfig
+from src.schemas.sonobuoy import SonobuoyConfig, SonobuoyFieldConfig
+
+logger = logging.getLogger(__name__)
 
 
 class World(BaseModel):
@@ -62,6 +67,50 @@ class ConfigData(BaseModel):
     platforms: list[PlatformConfig] = Field(
         default_factory=list, description="List of PlatformConfig instances."
     )
+    sonobuoys: list[SonobuoyConfig] = Field(
+        default_factory=list, description="List of sonobuoy receivers."
+    )
+    sonobuoy_field: Optional[SonobuoyFieldConfig] = Field(
+        default=None, description="Field-level multistatic fusion configuration."
+    )
+
+    @model_validator(mode="after")
+    def validate_config_data(self) -> ConfigData:
+        world_x_min = self.world.origin_x
+        world_x_max = self.world.origin_x + self.world.length
+        world_y_min = self.world.origin_y
+        world_y_max = self.world.origin_y + self.world.height
+
+        names: set[str] = set()
+        for buoy in self.sonobuoys:
+            if buoy.display_name in names:
+                raise ValueError(
+                    f"Duplicate sonobuoy display name: '{buoy.display_name}'"
+                )
+            names.add(buoy.display_name)
+
+            if not (
+                world_x_min <= buoy.x_m <= world_x_max
+                and world_y_min <= buoy.y_m <= world_y_max
+            ):
+                raise ValueError(
+                    f"Sonobuoy '{buoy.display_name}' at ({buoy.x_m}, {buoy.y_m}) is outside world bounds "
+                    f"[{world_x_min}, {world_x_max}] x [{world_y_min}, {world_y_max}]"
+                )
+
+        if self.sonobuoy_field is not None and self.sonobuoys:
+            participating_buoys = [
+                b
+                for b in self.sonobuoys
+                if any(m in b.evaluation_modes for m in ("multi", "single_cycle"))
+            ]
+            if self.sonobuoy_field.data_fusion_requirement > len(participating_buoys):
+                logger.warning(
+                    "data_fusion_requirement (%d) is greater than the number of participating buoys (%d)",
+                    self.sonobuoy_field.data_fusion_requirement,
+                    len(participating_buoys),
+                )
+        return self
 
     @classmethod
     def from_dict(cls, data: dict) -> ConfigData:
@@ -74,8 +123,25 @@ class ConfigData(BaseModel):
         Returns:
             ConfigData instance.
         """
+        raw_sonobuoys = data.get("sonobuoys", [])
+        sonobuoys = [
+            b if isinstance(b, SonobuoyConfig) else SonobuoyConfig(**b)
+            for b in raw_sonobuoys
+        ]
+        raw_field = data.get("sonobuoy_field")
+        sonobuoy_field = (
+            raw_field
+            if isinstance(raw_field, SonobuoyFieldConfig)
+            else (SonobuoyFieldConfig(**raw_field) if raw_field else None)
+        )
         return cls(
             simulation=SimulationConfig(**data.get("simulation", {})),
             world=World(**data.get("world", {})),
-            platforms=[PlatformConfig(**p) for p in data.get("platforms", [])],
+            platforms=[
+                p if isinstance(p, PlatformConfig) else PlatformConfig(**p)
+                for p in data.get("platforms", [])
+            ],
+            sonobuoys=sonobuoys,
+            sonobuoy_field=sonobuoy_field,
         )
+

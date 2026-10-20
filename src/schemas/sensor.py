@@ -1,8 +1,11 @@
+import logging
 from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from src.schemas.error_handling import human_readable_errors
+
+logger = logging.getLogger(__name__)
 
 
 class SensorConfig(BaseModel):
@@ -16,6 +19,8 @@ class SensorConfig(BaseModel):
         sensor_type (str): The type of the sensor.
         k (int): An integer parameter associated with the sensor.
         n (int): An integer parameter associated with the sensor.
+        active_source (bool): Whether the sensor acts as an active multistatic acoustic source.
+        source_receiver_collocated (bool): Whether the active source is collocated with a receiver.
     """
 
     display_name: str = Field(..., description="The display name of the sensor.")
@@ -31,6 +36,19 @@ class SensorConfig(BaseModel):
     type: str = Field(..., description="The type of the sensor.")
     k: int = Field(gt=0, description="An integer parameter associated with the sensor.")
     n: int = Field(gt=0, description="An integer parameter associated with the sensor.")
+    active_source: bool = Field(
+        default=False,
+        description="Whether this sensor acts as an active multistatic acoustic source.",
+    )
+    source_receiver_collocated: bool = Field(
+        default=False,
+        description="Whether this active sensor is collocated as a receiver.",
+    )
+
+    @property
+    def can_detect(self) -> bool:
+        """Return True if this sensor can perform receiver detection."""
+        return not self.active_source or self.source_receiver_collocated
 
     @model_validator(mode="after")
     def validate_sensor_parameters(self) -> "SensorConfig":
@@ -43,6 +61,10 @@ class SensorConfig(BaseModel):
         for p in self.pod:
             if not (0.0 <= p <= 1.0):
                 raise ValueError(f"Probability of detection must be between 0.0 and 1.0, got {p}")
+        if self.source_receiver_collocated and not self.active_source:
+            raise ValueError(
+                "source_receiver_collocated cannot be True when active_source is False"
+            )
         return self
 
 
@@ -103,6 +125,8 @@ class SensorFactory:
             return sensor_class(**kwargs), []
 
         except ValidationError as e:
-            print(human_readable_errors(e))
+            errors = human_readable_errors(e)
+            logger.error("Sensor validation failed: %s", errors)
 
-            return None, human_readable_errors(e)
+            return None, errors
+
