@@ -402,3 +402,10 @@ def test_int_07_multistatic_sonobuoy_simulation(tmp_path: Path):
     # Highest priority is single_cycle
     assert "single_cycle" in det_df["mode"].values
 
+    # Check summary_stats.csv records single-cycle end condition and sonobuoy_field detector
+    summary_text = (output_dir / "summary_stats.csv").read_text(encoding="utf-8")
+    assert "sonobuoy_single_cycle_detection" in summary_text
+    assert "sonobuoy_field" in summary_text
+
+
+

@@ -1,14 +1,16 @@
 # display_name: Sensor 1
-# interval_time_sec: 1.0
+# interval_time_sec: 3.0
 # type: generic
-# k: 3
+# k: 1
 # n: 5
+# active_source: True
+# source_receiver_collocated: False
 # fov_start_deg: 0.0
-# fov_end_deg: 190.0
+# fov_end_deg: 90.0
 
 distance_m,pod
 0.0,1.0
 100.0,0.8
 200.0,0.6
 500.0,0.4
-10000.0,0.2
+1000.0,0.2

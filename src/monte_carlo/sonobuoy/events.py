@@ -25,3 +25,4 @@ class SonobuoyFusionResult:
 
     mode: SonobuoyEvaluationMode
     events: tuple[SonobuoyDetectionEvent, ...]
+

@@ -279,3 +279,5 @@ def test_end_06_sonobuoy_end_conditions_and_priority():
     assert res_sb_beats_time is not None
     assert res_sb_beats_time.condition == "sonobuoy_single_cycle_detection"
 
+
+

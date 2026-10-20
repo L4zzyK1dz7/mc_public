@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import Optional
 import pytest
 
 from src.monte_carlo.sonobuoy.fusion import (
@@ -17,7 +18,7 @@ from src.schemas.sonobuoy import SonobuoyConfig
 pytestmark = pytest.mark.unit
 
 
-def make_buoy(name: str, k: int = 1, n: int = 3, modes: list[str] | None = None) -> SonobuoyConfig:
+def make_buoy(name: str, k: int = 1, n: int = 3, modes: Optional[list[str]] = None) -> SonobuoyConfig:
     return SonobuoyConfig(
         display_name=name,
         x_m=0.0,
@@ -130,13 +131,13 @@ def test_evaluate_fusion_priority_order():
     assert res is not None
     assert res.mode == "single_cycle"
 
-    # Now simulate no single_cycle (latest is empty/cleared), multi and single remain met
+    # Now simulate no single_cycle (latest is empty/cleared), multi and single remain met -> multi wins
     state.clear_cycle()
     res2 = evaluate_fusion([b1, b2], [target], state, data_fusion_requirement=2, timestamp_sec=11.0)
     assert res2 is not None
     assert res2.mode == "multi"
 
-    # Now make multi requirement higher so only single is met
+    # Now make multi requirement higher so only single is met -> single wins
     res3 = evaluate_fusion([b1, b2], [target], state, data_fusion_requirement=5, timestamp_sec=12.0)
     assert res3 is not None
     assert res3.mode == "single"
@@ -144,3 +145,4 @@ def test_evaluate_fusion_priority_order():
     # When no conditions met
     state.reset()
     assert evaluate_fusion([b1, b2], [target], state, data_fusion_requirement=2, timestamp_sec=13.0) is None
+

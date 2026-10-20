@@ -256,3 +256,120 @@ def test_out_07_generate_table_4_and_csv_section(tmp_path: Path):
     assert "detecting_platform_id" in t5.columns
     assert "target_platform_id" in t5.columns
 
+
+# ==============================================================================
+# OUT-08: Sonobuoy Field as Detector in Summary Stats (Tables 1, 2, 3, 5)
+# ==============================================================================
+def test_out_08_sonobuoy_field_detector_seeding_and_summary_stats():
+    """Verify treating sonobuoy field as a detector across summary stats tables."""
+    from src.monte_carlo.sonobuoy.events import SonobuoyDetectionEvent
+    from src.schemas.sonobuoy import SonobuoyConfig
+
+    buoy_a = SonobuoyConfig(
+        display_name="Buoy A",
+        x_m=100.0,
+        y_m=200.0,
+        k=1,
+        n=1,
+        distance_m=[0.0, 1000.0],
+        pod=[1.0, 0.5],
+        evaluation_modes=["single", "multi", "single_cycle"],
+    )
+    buoy_b = SonobuoyConfig(
+        display_name="Buoy B",
+        x_m=300.0,
+        y_m=400.0,
+        k=1,
+        n=1,
+        distance_m=[0.0, 1000.0],
+        pod=[1.0, 0.5],
+        evaluation_modes=["single", "single_cycle"],
+    )
+    buoys = [buoy_a, buoy_b]
+
+    sensor = GenericSensorConfig(
+        display_name="Radar",
+        interval_time_sec=1.0,
+        x_values=[0.0, 500.0],
+        pod=[1.0, 0.5],
+        k=1,
+        n=1,
+    )
+    blue = make_platform_state("Blue_1", team="Blue", sensors=[sensor])
+    red = make_platform_state("Red_1", team="Red")
+
+    # Replication 0: sonobuoy single-cycle detects Red_1
+    mgr_0 = OutcomeDetectionManager(replication_id=0)
+    mgr_0.seed_pairs([blue, red], buoys)
+
+    # 1 platform sensor + 2 field modes (single_cycle, multi) + 2 buoys in single mode = 5 rows
+    assert len(mgr_0.rows) == 5
+    mgr_0.record_sonobuoy_detection(
+        SonobuoyDetectionEvent(
+            timestamp_sec=60.0,
+            detecting_id="sonobuoy_field",
+            target_platform_id="Red_1",
+            mode="single_cycle",
+            distance_m=1500.0,
+        )
+    )
+    mgr_0.set_end_condition("sonobuoy_single_cycle_detection")
+
+    # Replication 1: no detection, ends with time_limit
+    mgr_1 = OutcomeDetectionManager(replication_id=1)
+    mgr_1.seed_pairs([blue, red], buoys)
+    mgr_1.set_end_condition("time_limit")
+
+    all_rows = mgr_0.rows + mgr_1.rows
+    assert len(all_rows) == 10
+
+    # Table 1: All agents (Blue_1, sonobuoy_field, Buoy A, Buoy B)
+    t1 = generate_table_1(all_rows)
+    field_t1 = t1[
+        (t1["detecting_platform_id"] == "sonobuoy_field")
+        & (t1["target_platform_id"] == "Red_1")
+    ].iloc[0]
+    assert field_t1["average_detections"] == pytest.approx(0.5)
+    assert field_t1["average_detection_distance_km"] == pytest.approx(1.5)
+    assert field_t1["average_detection_timestamp_minutes"] == pytest.approx(1.0)
+
+    buoy_a_t1 = t1[
+        (t1["detecting_platform_id"] == "Buoy A")
+        & (t1["target_platform_id"] == "Red_1")
+    ].iloc[0]
+    assert buoy_a_t1["average_detections"] == pytest.approx(0.0)
+
+    # Table 2: All sensors/modes
+    t2 = generate_table_2(all_rows)
+    sc_t2 = t2[
+        (t2["detecting_platform_id"] == "sonobuoy_field")
+        & (t2["sensor_name"] == "single_cycle")
+    ].iloc[0]
+    assert sc_t2["average_sensor_detections"] == pytest.approx(0.5)
+    assert sc_t2["average_detection_distance_km"] == pytest.approx(1.5)
+
+    multi_t2 = t2[
+        (t2["detecting_platform_id"] == "sonobuoy_field")
+        & (t2["sensor_name"] == "multi")
+    ].iloc[0]
+    assert multi_t2["average_sensor_detections"] == pytest.approx(0.0)
+
+    single_t2 = t2[
+        (t2["detecting_platform_id"] == "Buoy A")
+        & (t2["sensor_name"] == "single")
+    ].iloc[0]
+    assert single_t2["average_sensor_detections"] == pytest.approx(0.0)
+
+    # Table 3: Target overall detection probability
+    t3 = generate_table_3(all_rows)
+    assert t3[t3["target_platform_id"] == "Red_1"]["probability_of_at_least_one_detection"].iloc[0] == pytest.approx(0.5)
+
+    # Table 5: Raw audit log
+    t5 = generate_table_5(all_rows)
+    assert len(t5) == 10
+    detected_t5 = t5[t5["detection_outcome"]]
+    assert len(detected_t5) == 1
+    assert detected_t5["detecting_platform_id"].iloc[0] == "sonobuoy_field"
+    assert detected_t5["sensor_name"].iloc[0] == "single_cycle"
+    assert detected_t5["detection_distance_km"].iloc[0] == pytest.approx(1.5)
+

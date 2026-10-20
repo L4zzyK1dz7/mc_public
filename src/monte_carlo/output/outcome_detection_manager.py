@@ -8,15 +8,18 @@ proceeds - so summary statistics can report both detections and non-detections.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from src.monte_carlo.detection_pipeline.pairs import iter_platform_sensors
 
 if TYPE_CHECKING:
+    from typing import Any, Sequence
+
     from src.monte_carlo.detection_pipeline.events import DetectionEvent
     from src.monte_carlo.sonobuoy.events import SonobuoyDetectionEvent
     from src.monte_carlo.states.platform_states import PlatformState
     from src.schemas.output import DetectionOutcomeEvent
+    from src.schemas.sonobuoy import SonobuoyConfig
 
 
 
@@ -34,7 +37,11 @@ class OutcomeDetectionManager:
         """Return the finalised detection outcome rows."""
         return list(self._rows.values())
 
-    def seed_pairs(self, platform_states: list[PlatformState]) -> None:
+    def seed_pairs(
+        self,
+        platform_states: list[PlatformState],
+        sonobuoys: Optional[Sequence[SonobuoyConfig]] = None,
+    ) -> None:
         """Create a default 'not detected' row for every sensor-target combination."""
         for platform, sensor, target_platforms in iter_platform_sensors(
             platform_states
@@ -46,6 +53,72 @@ class OutcomeDetectionManager:
                     "detecting_platform_id": platform.id,
                     "sensor_name": sensor.display_name,
                     "target_platform_id": target.id,
+                    "detection_outcome": False,
+                    "detection_distance_m": None,
+                    "detection_timestamp_sec": None,
+                    "end_condition": None,
+                }
+
+        if sonobuoys:
+            red_targets = [
+                p
+                for p in platform_states
+                if (p.team.value if hasattr(p.team, "value") else str(p.team)) == "Red"
+            ]
+            self.seed_sonobuoys(sonobuoys, red_targets)
+
+    def seed_sonobuoys(
+        self,
+        sonobuoys: Sequence[SonobuoyConfig],
+        target_platforms: Sequence[Any],
+    ) -> None:
+        """Create default 'not detected' rows for sonobuoy field and participating buoys.
+
+        Seeds:
+        - ("sonobuoy_field", "single_cycle", target_id) if any buoy participates in single_cycle
+        - ("sonobuoy_field", "multi", target_id) if any buoy participates in multi
+        - (buoy.display_name, "single", target_id) for each buoy participating in single
+        """
+        if not sonobuoys or not target_platforms:
+            return
+
+        has_single_cycle = any("single_cycle" in b.evaluation_modes for b in sonobuoys)
+        has_multi = any("multi" in b.evaluation_modes for b in sonobuoys)
+        single_buoys = [b for b in sonobuoys if "single" in b.evaluation_modes]
+
+        for target in target_platforms:
+            target_id = getattr(target, "id", str(target))
+            if has_single_cycle:
+                key = ("sonobuoy_field", "single_cycle", target_id)
+                self._rows[key] = {
+                    "replication_id": self.replication_id,
+                    "detecting_platform_id": "sonobuoy_field",
+                    "sensor_name": "single_cycle",
+                    "target_platform_id": target_id,
+                    "detection_outcome": False,
+                    "detection_distance_m": None,
+                    "detection_timestamp_sec": None,
+                    "end_condition": None,
+                }
+            if has_multi:
+                key = ("sonobuoy_field", "multi", target_id)
+                self._rows[key] = {
+                    "replication_id": self.replication_id,
+                    "detecting_platform_id": "sonobuoy_field",
+                    "sensor_name": "multi",
+                    "target_platform_id": target_id,
+                    "detection_outcome": False,
+                    "detection_distance_m": None,
+                    "detection_timestamp_sec": None,
+                    "end_condition": None,
+                }
+            for buoy in single_buoys:
+                key = (buoy.display_name, "single", target_id)
+                self._rows[key] = {
+                    "replication_id": self.replication_id,
+                    "detecting_platform_id": buoy.display_name,
+                    "sensor_name": "single",
+                    "target_platform_id": target_id,
                     "detection_outcome": False,
                     "detection_distance_m": None,
                     "detection_timestamp_sec": None,

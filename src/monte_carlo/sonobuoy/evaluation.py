@@ -65,4 +65,4 @@ def evaluate_pings(
 
                 window = state.get_window(buoy.display_name, target.id, buoy.n)
                 window.append(hit)
-                state.record_latest(buoy.display_name, target.id, hit)
+                state.record_latest(buoy.display_name, target.id, hit, requiv=requiv)

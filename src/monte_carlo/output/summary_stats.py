@@ -92,9 +92,9 @@ def generate_table_1(
     representative = _first_detection_per_group(df, group_cols)
 
     per_replication = universe.merge(representative, on=group_cols, how="left")
-    per_replication["detection_outcome"] = per_replication["detection_outcome"].fillna(
-        False
-    ).astype(bool)
+    per_replication["detection_outcome"] = per_replication["detection_outcome"].eq(
+        True
+    )
 
     grouped = (
         per_replication.groupby(["detecting_platform_id", "target_platform_id"])

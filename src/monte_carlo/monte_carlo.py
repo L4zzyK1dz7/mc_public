@@ -81,7 +81,7 @@ def _execute_single_replication(
         config_data, random_gen
     )
     outcome_manager.record_initial_positions(platform_states)
-    detection_manager.seed_pairs(platform_states)
+    detection_manager.seed_pairs(platform_states, config_data.sonobuoys)
 
     # Calculate number of total timesteps
     max_steps = int(
@@ -218,11 +218,7 @@ def _execute_single_replication(
             end_condition.timestamp_sec,
         )
 
-        if end_condition.condition in (
-            "sonobuoy_single_cycle_detection",
-            "sonobuoy_multi_detection",
-            "sonobuoy_single_detection",
-        ):
+        if end_condition.condition.startswith("sonobuoy_"):
             for sb_event in end_condition.sonobuoy_events:
                 detection_manager.record_sonobuoy_detection(sb_event)
                 sonobuoy_detection_records.append(

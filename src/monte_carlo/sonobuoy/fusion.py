@@ -41,18 +41,26 @@ def single_cycle_detections(
     eligible_buoys = [b for b in sonobuoys if "single_cycle" in b.evaluation_modes]
 
     for target in target_platforms:
-        active_hits = sum(
-            1
+        hitting_buoys = [
+            b
             for b in eligible_buoys
             if state.latest.get(b.display_name, {}).get(target.id, False)
-        )
-        if active_hits >= data_fusion_requirement:
+        ]
+        if len(hitting_buoys) >= data_fusion_requirement:
+            distances = [
+                state.latest_requiv[b.display_name][target.id]
+                for b in hitting_buoys
+                if b.display_name in state.latest_requiv
+                and target.id in state.latest_requiv[b.display_name]
+            ]
+            avg_dist = float(sum(distances) / len(distances)) if distances else None
             events.append(
                 SonobuoyDetectionEvent(
                     timestamp_sec=timestamp_sec,
                     detecting_id="sonobuoy_field",
                     target_platform_id=target.id,
                     mode="single_cycle",
+                    distance_m=avg_dist,
                 )
             )
     return events
@@ -89,12 +97,20 @@ def multi_buoy_detections(
             for b in eligible_buoys
         )
         if total_hits >= data_fusion_requirement:
+            distances = [
+                state.latest_requiv[b.display_name][target.id]
+                for b in eligible_buoys
+                if b.display_name in state.latest_requiv
+                and target.id in state.latest_requiv[b.display_name]
+            ]
+            avg_dist = float(sum(distances) / len(distances)) if distances else None
             events.append(
                 SonobuoyDetectionEvent(
                     timestamp_sec=timestamp_sec,
                     detecting_id="sonobuoy_field",
                     target_platform_id=target.id,
                     mode="multi",
+                    distance_m=avg_dist,
                 )
             )
     return events
@@ -127,12 +143,14 @@ def single_buoy_detections(
         for target in target_platforms:
             window = state.get_window(buoy.display_name, target.id, buoy.n)
             if sum(window) >= buoy.k:
+                dist = state.latest_requiv.get(buoy.display_name, {}).get(target.id)
                 events.append(
                     SonobuoyDetectionEvent(
                         timestamp_sec=timestamp_sec,
                         detecting_id=buoy.display_name,
                         target_platform_id=target.id,
                         mode="single",
+                        distance_m=dist,
                     )
                 )
     return events
@@ -179,3 +197,4 @@ def evaluate_fusion(
         return SonobuoyFusionResult(mode="single", events=tuple(single_events))
 
     return None
+
