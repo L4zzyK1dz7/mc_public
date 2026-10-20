@@ -1,71 +1,44 @@
 platforms:
-  - display_name: Platform 1
-    movement_type:
-      type: user_defined_waypoints
-      waypoints:
-        - x: 30000.0
-          y: 80000.0
-    neutralised_platform_behaviour: stop
-    platform_config_folder: Platform 1
-    sensors:
-      - generic
-    speed_mps: 0.0
-    team: Blue
-  - display_name: Platform 2
-    movement_type:
-      type: random_walk
-    neutralised_platform_behaviour: stop
-    platform_config_folder: Platform 2
-    sensors:
-      - generic
-    speed_mps: 0.0
-    team: Blue
-  - display_name: Platform 3
-    movement_type:
-      type: random_walk
-    neutralised_platform_behaviour: stop
-    platform_config_folder: Platform 3
-    sensors: []
-    speed_mps: 10.0
-    team: Red
+- display_name: Agent_1
+  movement_type:
+    height: 200.0
+    length: 500.0
+    start_x_pos: 100.0
+    start_y_pos: 100.0
+    type: barrier_patrol
+  neutralised_platform_behaviour: stop
+  platform_config_folder: blue_1
+  sensors: []
+  speed_mps: 2.7777777777777777
+  team: Blue
+- display_name: Agent_2
+  movement_type:
+    end_condition: cross_world
+    start_distance_m: 0.0
+    type: intruder_search
+  neutralised_platform_behaviour: stop
+  platform_config_folder: blue_2
+  sensors: []
+  speed_mps: 2.7777777777777777
+  team: Blue
+- display_name: Agent_3
+  movement_type:
+    type: random_walk
+  neutralised_platform_behaviour: stop
+  platform_config_folder: red_1
+  sensors: []
+  speed_mps: 2.7777777777777777
+  team: Red
 simulation:
   detection_end_condition: initial_detection
-  replications: 100
+  replications: 5
   seeds_file: true
-  time_limit_sec: 3600.0
+  time_limit_sec: 12960000.0
   timestep_sec: 1.0
-sonobuoy_field:
-  data_fusion_requirement: 3
-sonobuoys:
-  - display_name: Buoy 1
-    evaluation_modes:
-      - single
-      - multi
-      - single_cycle
-    k: 3
-    n: 5
-    x_m: 20000.0
-    y_m: 50000.0
-  - display_name: Buoy 2
-    evaluation_modes:
-      - single
-      - multi
-      - single_cycle
-    k: 3
-    n: 5
-    x_m: 50000.0
-    y_m: 50000.0
-  - display_name: Buoy 3
-    evaluation_modes:
-      - single
-      - multi
-      - single_cycle
-    k: 3
-    n: 5
-    x_m: 80000.0
-    y_m: 50000.0
+sonobuoy_field: null
+sonobuoys: []
 world:
-  height: 100000.0
-  length: 100000.0
+  height: 800000000.0
+  length: 1000000000.0
   origin_x: 0.0
   origin_y: 0.0

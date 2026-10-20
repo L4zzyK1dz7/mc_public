@@ -52,8 +52,20 @@ def establish_pages() -> None:
         title="Results",
     )
 
+    user_guide_page = st.Page(
+        page="src/ui/views/user_guide.py",
+        default=False,
+        title="User Guide",
+    )
+
     navigation = st.navigation(
-        [home_page, create_platforms_page, create_sonobuoys_page, results_page]
+        [
+            home_page,
+            create_platforms_page,
+            create_sonobuoys_page,
+            results_page,
+            user_guide_page,
+        ]
     )
 
     navigation.run()
