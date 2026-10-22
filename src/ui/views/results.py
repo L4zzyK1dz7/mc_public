@@ -18,6 +18,8 @@ from src.ui.services.animation_data import (
     build_platforms,
     compute_replication_end_sec,
     load_animation_inputs,
+    load_barriers,
+    load_operating_area,
     load_sonobuoys,
     load_sonobuoy_detections,
 )
@@ -269,12 +271,18 @@ def main() -> None:
 
             config_path = selected_folder / "input_data" / "config.yaml"
             sonobuoys = []
+            operating_area = None
+            barriers = None
             if config_path.exists():
                 try:
                     cfg = load_config_from_yaml(config_path)
                     sonobuoys = load_sonobuoys(cfg)
+                    operating_area = load_operating_area(cfg)
+                    barriers = load_barriers(cfg)
                 except Exception:
                     sonobuoys = []
+                    operating_area = None
+                    barriers = None
             sb_detections = load_sonobuoy_detections(
                 selected_folder, int(selected_replication)
             )
@@ -285,6 +293,8 @@ def main() -> None:
                     timing,
                     sonobuoys=sonobuoys,
                     sonobuoy_detections=sb_detections,
+                    operating_area=operating_area,
+                    barriers=barriers,
                 ),
                 use_container_width=True,
             )

@@ -157,7 +157,9 @@ def organise_input_data_directory(
     return platforms
 
 
-def generate_seeds_file(replications: int) -> None:
+def generate_seeds_file(
+    replications: int, seeds_path: Path = Path("input_data/seeds.txt")
+) -> None:
     """
     Generate a seeds.txt file with random seeds.
     """
@@ -168,7 +170,6 @@ def generate_seeds_file(replications: int) -> None:
         for rng in child_rngs  # provides 1 32-bit unsigned integer as array([int], dtype=uint32)
     ]
 
-    seeds_path = Path("input_data/seeds.txt")
     seeds_path.parent.mkdir(parents=True, exist_ok=True)
     with open(seeds_path, "w") as f:
         for seed in seeds:
@@ -201,10 +202,15 @@ def create_config_yaml(
     input_data_path.mkdir(parents=True, exist_ok=True)
     logger.info("Cleared existing configuration at: %s", input_data_path)
 
-    generate_seeds_file(config_data.simulation.replications)
+    generate_seeds_file(
+        config_data.simulation.replications,
+        seeds_path=input_data_path / "seeds.txt",
+    )
 
     # Organise input data directory
-    config_data.platforms = organise_input_data_directory(config_data)
+    config_data.platforms = organise_input_data_directory(
+        config_data, input_data_path=input_data_path
+    )
     logger.info(
         "Organised input data directory. Platforms updated. %s", config_data.platforms
     )
@@ -215,6 +221,8 @@ def create_config_yaml(
     )  # hours to seconds
     config_data.world.height = float(config_data.world.height * 1000)  # km to meters
     config_data.world.length = float(config_data.world.length * 1000)  # km to meters
+    config_data.world.origin_x = float(config_data.world.origin_x * 1000)  # km to meters
+    config_data.world.origin_y = float(config_data.world.origin_y * 1000)  # km to meters
     for buoy in config_data.sonobuoys:
         buoy.x_m = float(buoy.x_m * 1000)  # km to meters
         buoy.y_m = float(buoy.y_m * 1000)  # km to meters

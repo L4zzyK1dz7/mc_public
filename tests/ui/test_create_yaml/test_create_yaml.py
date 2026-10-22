@@ -91,5 +91,37 @@ def test_config_matches_mock_yaml():
     )
 
 
-# Command to run the test:
-# python -m pytest -s src/tests/ui/test_create_yaml/test_create_yaml.py -vv
+def test_create_config_yaml_converts_origin_km_to_meters(tmp_path: Path):
+    """Verify that world origin_x and origin_y are converted from km to meters."""
+    simulation_config = SimulationConfig(
+        replications=1,
+        time_limit_sec=1.0,
+        timestep_sec=1.0,
+        seeds_file=False,
+        detection_end_condition="initial_detection",
+    )
+    world_config = World(
+        origin_x=1.5,
+        origin_y=2.5,
+        length=10.0,
+        height=10.0,
+    )
+    platform = PlatformConfig(
+        platform_config_folder="blue_1",
+        display_name="Agent_1",
+        team="Blue",
+        speed_mps=1.0,
+        neutralised_platform_behaviour="stop",
+        movement_type=RandomWalkMovement(pattern="random_walk"),
+    )
+    cfg_data = ConfigData(
+        simulation=simulation_config,
+        world=world_config,
+        platforms=[platform],
+    )
+    result = create_config_yaml(cfg_data, input_data_path=tmp_path)
+    assert result["world"]["origin_x"] == 1500.0
+    assert result["world"]["origin_y"] == 2500.0
+    assert result["world"]["length"] == 10000.0
+    assert result["world"]["height"] == 10000.0
+

@@ -277,3 +277,73 @@ def test_load_sonobuoy_detections(tmp_path: Path):
 
     rep2 = load_sonobuoy_detections(tmp_path, 2)
     assert len(rep2) == 0
+
+
+def test_load_operating_area():
+    from src.ui.services.animation_data import load_operating_area
+
+    cfg = ConfigData(
+        simulation=SimulationConfig(
+            replications=1, time_limit_sec=10.0, timestep_sec=1.0, seeds_file=False
+        ),
+        world=World(origin_x=1000.0, origin_y=2000.0, length=5000.0, height=8000.0),
+        platforms=[],
+    )
+    op_area = load_operating_area(cfg)
+    assert op_area["x_min_km"] == pytest.approx(1.0)
+    assert op_area["x_max_km"] == pytest.approx(6.0)
+    assert op_area["y_min_km"] == pytest.approx(2.0)
+    assert op_area["y_max_km"] == pytest.approx(10.0)
+
+
+def test_load_barriers():
+    from src.schemas.movement import BarrierPatrollerMovement, RandomWalkMovement
+    from src.schemas.platform import PlatformConfig
+    from src.ui.services.animation_data import load_barriers
+
+    cfg_empty = ConfigData(
+        simulation=SimulationConfig(
+            replications=1, time_limit_sec=10.0, timestep_sec=1.0, seeds_file=False
+        ),
+        world=World(length=10000.0, height=10000.0),
+        platforms=[],
+    )
+    assert load_barriers(cfg_empty) == []
+
+    p_barrier = PlatformConfig(
+        platform_config_folder="blue_1",
+        display_name="Patroller_1",
+        team="Blue",
+        speed_mps=5.0,
+        neutralised_platform_behaviour="stop",
+        movement_type=BarrierPatrollerMovement(
+            pattern="barrier_patrol",
+            start_x_pos=2000.0,
+            start_y_pos=3000.0,
+            length=6000.0,
+            height=500.0,
+        ),
+    )
+    p_random = PlatformConfig(
+        platform_config_folder="red_1",
+        display_name="Intruder_1",
+        team="Red",
+        speed_mps=5.0,
+        neutralised_platform_behaviour="stop",
+        movement_type=RandomWalkMovement(pattern="random_walk"),
+    )
+    cfg = ConfigData(
+        simulation=SimulationConfig(
+            replications=1, time_limit_sec=10.0, timestep_sec=1.0, seeds_file=False
+        ),
+        world=World(length=10000.0, height=10000.0),
+        platforms=[p_barrier, p_random],
+    )
+    barriers = load_barriers(cfg)
+    assert len(barriers) == 1
+    assert barriers[0]["platform_id"] == "Blue_1"
+    assert barriers[0]["name"] == "Patroller_1"
+    assert barriers[0]["x_start_km"] == pytest.approx(2.0)
+    assert barriers[0]["x_end_km"] == pytest.approx(8.0)
+    assert barriers[0]["y_km"] == pytest.approx(3.0)
+

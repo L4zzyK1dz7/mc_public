@@ -20,6 +20,8 @@ from pathlib import Path
 from src.monte_carlo.configuration.load_configuration import load_config_from_yaml
 from src.ui.plotting.platform_animation import build_animation
 from src.ui.services.animation_data import (
+    load_barriers,
+    load_operating_area,
     load_replication_animation_data,
     load_sonobuoys,
     load_sonobuoy_detections,
@@ -71,17 +73,28 @@ def main() -> None:
         sys.exit(1)
 
     sonobuoys = None
+    operating_area = None
+    barriers = None
     config_path = args.run_folder / "input_data" / "config.yaml"
     if config_path.exists():
         try:
             cfg = load_config_from_yaml(config_path)
             sonobuoys = load_sonobuoys(cfg)
+            operating_area = load_operating_area(cfg)
+            barriers = load_barriers(cfg)
         except Exception:
             sonobuoys = None
+            operating_area = None
+            barriers = None
 
     sb_detections = load_sonobuoy_detections(args.run_folder, args.replication)
     figure = build_animation(
-        platforms, timing, sonobuoys=sonobuoys, sonobuoy_detections=sb_detections
+        platforms,
+        timing,
+        sonobuoys=sonobuoys,
+        sonobuoy_detections=sb_detections,
+        operating_area=operating_area,
+        barriers=barriers,
     )
 
     if args.output is not None:

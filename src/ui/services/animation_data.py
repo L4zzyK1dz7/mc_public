@@ -18,7 +18,9 @@ from src.monte_carlo.configuration.load_configuration import load_config_from_ya
 from src.monte_carlo.states.platform_states import assign_platform_ids
 from src.schemas.simulation import ConfigData
 from src.ui.plotting.platform_animation import (
+    BarrierDefinition,
     DetectionEvent,
+    OperatingAreaDefinition,
     PlatformAnimationData,
     PlatformPosition,
     SensorDefinition,
@@ -286,3 +288,61 @@ def load_sonobuoy_detections(
             "Could not read sonobuoy_detections.csv from %s: %s", run_folder, exc
         )
         return []
+
+
+def load_operating_area(config_data: ConfigData) -> OperatingAreaDefinition:
+    """Extract operating area bounds in km from a validated ConfigData."""
+    world = config_data.world
+    origin_x_km = float(world.origin_x) / 1000.0
+    origin_y_km = float(world.origin_y) / 1000.0
+    length_km = float(world.length) / 1000.0
+    height_km = float(world.height) / 1000.0
+    return {
+        "x_min_km": origin_x_km,
+        "x_max_km": origin_x_km + length_km,
+        "y_min_km": origin_y_km,
+        "y_max_km": origin_y_km + height_km,
+    }
+
+
+def load_barriers(config_data: ConfigData) -> list[BarrierDefinition]:
+    """Extract barrier definitions (platform_id, name, x_start_km, x_end_km, y_km) from ConfigData."""
+    if not getattr(config_data, "platforms", None):
+        return []
+    platform_ids = assign_platform_ids(config_data.platforms)
+    barriers: list[BarrierDefinition] = []
+    for platform_id, platform in zip(platform_ids, config_data.platforms):
+        movement = getattr(platform, "movement_type", None)
+        if movement is None:
+            continue
+        mtype = getattr(movement, "type", None)
+        if mtype is None and isinstance(movement, dict):
+            mtype = movement.get("type")
+
+        if mtype == "barrier_patrol":
+            start_x = getattr(movement, "start_x_pos", None)
+            if start_x is None and isinstance(movement, dict):
+                start_x = movement.get("start_x_pos", 0.0)
+            start_y = getattr(movement, "start_y_pos", None)
+            if start_y is None and isinstance(movement, dict):
+                start_y = movement.get("start_y_pos", 0.0)
+            length = getattr(movement, "length", None)
+            if length is None and isinstance(movement, dict):
+                length = movement.get("length", 0.0)
+
+            x_start_km = float(start_x) / 1000.0
+            x_end_km = (float(start_x) + float(length)) / 1000.0
+            y_km = float(start_y) / 1000.0
+
+            name = (getattr(platform, "display_name", "") or "").strip() or platform_id
+            barriers.append(
+                {
+                    "platform_id": str(platform_id),
+                    "name": str(name),
+                    "x_start_km": x_start_km,
+                    "x_end_km": x_end_km,
+                    "y_km": y_km,
+                }
+            )
+    return barriers
+

@@ -59,6 +59,21 @@ class SonobuoyDefinition(TypedDict):
     y_km: float
 
 
+class OperatingAreaDefinition(TypedDict):
+    x_min_km: float
+    x_max_km: float
+    y_min_km: float
+    y_max_km: float
+
+
+class BarrierDefinition(TypedDict):
+    platform_id: str
+    name: str
+    x_start_km: float
+    x_end_km: float
+    y_km: float
+
+
 class PlatformAnimationData(TypedDict, total=False):
     display_name: str
     positions: list[PlatformPosition]
@@ -152,6 +167,8 @@ def build_animation(
     timing: SimulationTiming,
     sonobuoys: Optional[list[SonobuoyDefinition]] = None,
     sonobuoy_detections: Optional[list[dict[str, Any]]] = None,
+    operating_area: Optional[OperatingAreaDefinition] = None,
+    barriers: Optional[list[BarrierDefinition]] = None,
 ) -> go.Figure:
     """Build an animated Plotly figure for one replication's already-loaded platform data."""
     detection_events = [
@@ -208,6 +225,58 @@ def build_animation(
     detection_targets = {
         event["target_platform_id"] for event in detection_events
     }
+
+    # Add operating area as a static closed rectangle
+    if operating_area:
+        trace_specs.append(("operating_area", "Operating area", operating_area))
+        figure.add_trace(
+            go.Scatter(
+                x=[
+                    operating_area["x_min_km"],
+                    operating_area["x_max_km"],
+                    operating_area["x_max_km"],
+                    operating_area["x_min_km"],
+                    operating_area["x_min_km"],
+                ],
+                y=[
+                    operating_area["y_min_km"],
+                    operating_area["y_min_km"],
+                    operating_area["y_max_km"],
+                    operating_area["y_max_km"],
+                    operating_area["y_min_km"],
+                ],
+                mode="lines",
+                name="Operating area",
+                line={"color": "#000000", "width": 4},
+                fill=None,
+                hoverinfo="skip",
+            )
+        )
+
+    # Add barriers as static thick lines beneath platform trails
+    if barriers:
+        import plotly.colors as pc
+
+        n_barriers = len(barriers)
+        if n_barriers == 1:
+            barrier_colors = ["rgb(0, 0, 0)"]
+        else:
+            barrier_colors = pc.sample_colorscale(
+                "Greys", n_barriers, low=0.3, high=1.0
+            )
+
+        for barrier, b_color in zip(barriers, barrier_colors):
+            trace_specs.append(("barrier", barrier["platform_id"], barrier))
+            figure.add_trace(
+                go.Scatter(
+                    x=[barrier["x_start_km"], barrier["x_end_km"]],
+                    y=[barrier["y_km"], barrier["y_km"]],
+                    mode="lines",
+                    name=f"{barrier['name']} barrier",
+                    line={"color": b_color, "width": 10},
+                    hoverinfo="skip",
+                )
+            )
 
     # Add sonobuoys as static blue squares
     if sonobuoys:
@@ -296,7 +365,35 @@ def build_animation(
     for timestamp_sec in frame_times:
         frame_data = []
         for trace_type, platform_id, sensor_or_extra in trace_specs:
-            if trace_type == "sonobuoy":
+            if trace_type == "operating_area":
+                frame_data.append(
+                    go.Scatter(
+                        x=[
+                            sensor_or_extra["x_min_km"],
+                            sensor_or_extra["x_max_km"],
+                            sensor_or_extra["x_max_km"],
+                            sensor_or_extra["x_min_km"],
+                            sensor_or_extra["x_min_km"],
+                        ],
+                        y=[
+                            sensor_or_extra["y_min_km"],
+                            sensor_or_extra["y_min_km"],
+                            sensor_or_extra["y_max_km"],
+                            sensor_or_extra["y_max_km"],
+                            sensor_or_extra["y_min_km"],
+                        ],
+                    )
+                )
+                continue
+            elif trace_type == "barrier":
+                frame_data.append(
+                    go.Scatter(
+                        x=[sensor_or_extra["x_start_km"], sensor_or_extra["x_end_km"]],
+                        y=[sensor_or_extra["y_km"], sensor_or_extra["y_km"]],
+                    )
+                )
+                continue
+            elif trace_type == "sonobuoy":
                 frame_data.append(
                     go.Scatter(
                         x=[sensor_or_extra["x_km"]],
@@ -369,8 +466,32 @@ def build_animation(
     ]
     buoy_x = [b["x_km"] for b in (sonobuoys or [])]
     buoy_y = [b["y_km"] for b in (sonobuoys or [])]
-    all_x = [position["pos_x_km"] for position in all_positions] + buoy_x
-    all_y = [position["pos_y_km"] for position in all_positions] + buoy_y
+
+    box_x: list[float] = []
+    box_y: list[float] = []
+    if operating_area:
+        box_x = [operating_area["x_min_km"], operating_area["x_max_km"]]
+        box_y = [operating_area["y_min_km"], operating_area["y_max_km"]]
+
+    barrier_x: list[float] = []
+    barrier_y: list[float] = []
+    if barriers:
+        for b in barriers:
+            barrier_x.extend([b["x_start_km"], b["x_end_km"]])
+            barrier_y.append(b["y_km"])
+
+    all_x = (
+        [position["pos_x_km"] for position in all_positions]
+        + buoy_x
+        + box_x
+        + barrier_x
+    )
+    all_y = (
+        [position["pos_y_km"] for position in all_positions]
+        + buoy_y
+        + box_y
+        + barrier_y
+    )
 
     all_sensors = [
         sensor for platform in platforms.values() for sensor in platform["sensors"]
@@ -380,6 +501,12 @@ def build_animation(
     x_max = (max(all_x) if all_x else 100.0) + maximum_range
     y_min = (min(all_y) if all_y else 0.0) - maximum_range
     y_max = (max(all_y) if all_y else 100.0) + maximum_range
+    if x_min == x_max:
+        x_min -= 1.0
+        x_max += 1.0
+    if y_min == y_max:
+        y_min -= 1.0
+        y_max += 1.0
 
     def _resolve_name(pid: str) -> str:
         return platforms.get(pid, {}).get("display_name", pid)
