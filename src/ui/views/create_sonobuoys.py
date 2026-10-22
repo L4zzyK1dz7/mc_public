@@ -15,6 +15,10 @@ from src.ui.services.performance_table import (
     extract_valid_sensor_points,
     parse_sensor_csv,
 )
+from src.ui.services.platform_summary import (
+    build_sonobuoy_summary,
+    build_sonobuoy_summary as _build_sonobuoy_summary,
+)
 from src.ui.user_notifier import success
 
 logger = logging.getLogger(__name__)
@@ -31,28 +35,6 @@ def _has_active_blue_source() -> bool:
                 if getattr(sensor, "active_source", False):
                     return True
     return False
-
-
-def _build_sonobuoy_summary(buoys: list[SonobuoyConfig]) -> pd.DataFrame:
-    """Build summary dataframe of configured sonobuoys."""
-    if not buoys:
-        return pd.DataFrame()
-
-    rows = []
-    for idx, buoy in enumerate(buoys):
-        rows.append(
-            {
-                "Index": idx + 1,
-                "Name": buoy.display_name,
-                "X (km)": buoy.x_m,
-                "Y (km)": buoy.y_m,
-                "K": buoy.k,
-                "N": buoy.n,
-                "Modes": ", ".join(buoy.evaluation_modes),
-                "PoD Points": len(buoy.distance_m),
-            }
-        )
-    return pd.DataFrame(rows)
 
 
 def _is_duplicate_buoy_name(name: str) -> bool:

@@ -13,58 +13,41 @@ from src.schemas.platform import Team
 from src.schemas.simulation import ConfigData, SimulationConfig, World
 from src.schemas.sonobuoy import SonobuoyFieldConfig
 from src.ui.services.create_yaml import create_config_yaml
+from src.ui.services.platform_summary import (
+    build_platform_summary,
+    build_sonobuoy_summary,
+)
+from src.ui.services.progress_callback import make_progress_callback
 from src.ui.user_notifier import success
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-def render_platform_table_with_delete() -> None:
-    """
-    Render current platforms as a table and provide per-platform delete actions.
-    """
+def render_platform_summary_table() -> None:
+    """Render a read-only summary table of configured platforms."""
+    st.subheader("Platforms")
     platforms = st.session_state.get("platform_draft_list", [])
 
     if not platforms:
-        st.info("No platforms to display yet.")
+        st.info("No platforms configured yet.")
         return
 
-    table_rows = [
-        {
-            "Name": platform.display_name,
-            "Speed (m/s)": platform.speed_mps,
-            "Team": platform.team.value
-            if isinstance(platform.team, Team)
-            else str(platform.team),
-        }
-        for platform in platforms
-    ]
-    st.subheader("Current Platforms")
-    st.table(pd.DataFrame(table_rows))
+    df = build_platform_summary(platforms)
+    st.dataframe(df, width="stretch", hide_index=True)
 
-    st.markdown("### Delete a platform:")
-    for idx, platform in enumerate(platforms):
-        team_label = (
-            platform.team.value
-            if isinstance(platform.team, Team)
-            else str(platform.team)
-        )
-        label_col, action_col = st.columns([5, 1])
-        label_col.write(f"{platform.display_name} ({team_label})")
-        # Include both name and index to keep Streamlit widget keys stable across reruns.
-        delete_key = f"delete_platform_{platform.display_name}_{idx}"
-        if action_col.button("Delete", key=delete_key):
-            deleted_name = platform.display_name
-            # Remove by display_name so the update is deterministic even if indices shift.
-            st.session_state.platform_draft_list = [
-                p
-                for p in st.session_state.platform_draft_list
-                if p.display_name != deleted_name
-            ]
-            logger.info("Deleted platform: %s", deleted_name)
-            st.success(f"Deleted platform '{deleted_name}'.")
-            # Force immediate rerun so the table and status card reflect the new list.
-            st.rerun()
+
+def render_sonobuoy_summary_table() -> None:
+    """Render a read-only summary table of configured sonobuoys."""
+    st.subheader("Sonobuoys")
+    sonobuoys = st.session_state.get("sonobuoy_draft_list", [])
+
+    if not sonobuoys:
+        st.info("No sonobuoys configured yet.")
+        return
+
+    df = build_sonobuoy_summary(sonobuoys)
+    st.dataframe(df, width="stretch", hide_index=True)
 
 
 def render_platform_status_card() -> bool:
@@ -203,15 +186,19 @@ def main() -> None:
         "To run the Monte Carlo simulation, first create at least one Red and one Blue platform."
     )
 
-    # Render the platform status card and the platform table with delete buttons.
+    # Render the platform status card and read-only summary tables.
     ready_to_run_simulation = render_platform_status_card()
-    render_platform_table_with_delete()
+    render_platform_summary_table()
+    render_sonobuoy_summary_table()
 
     st.button(
         "Create Config YAML",
         help="Create a config.yaml file from the current platforms.",
         on_click=create_cfg_data,
     )
+
+    # Empty placeholder to host the replication progress bar
+    progress_placeholder = st.empty()
 
     # Render the "Run Simulation" button, which is enabled only if the simulation is ready to run.
     run_simulation_clicked = st.button(
@@ -226,7 +213,8 @@ def main() -> None:
         try:
             logger.info("Starting Monte Carlo simulation...")
             config_path = Path("input_data/config.yaml")
-            run_simulation(config_path)
+            cb = make_progress_callback(progress_placeholder)
+            run_simulation(config_path, progress_callback=cb)
             st.success("Monte Carlo simulation completed successfully!")
         except Exception as e:
             logger.exception("Error running simulation: %s", e)

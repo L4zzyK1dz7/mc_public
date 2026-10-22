@@ -9,6 +9,7 @@ import streamlit as st
 
 from src.schemas.movement import IntruderEndCondition
 from src.schemas.platform import PlatformConfig
+from src.ui.services.platform_summary import build_platform_summary
 from src.ui.user_notifier import success
 from src.ui.views.create_platform_sensors import render_sensor_creation
 
@@ -16,6 +17,34 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 KM_TO_M = 1000.0
+
+
+def render_platform_overview() -> None:
+    """Render the overview table and deletion controls for platforms."""
+    st.markdown("### Configured Platforms")
+    platforms = st.session_state.get("platform_draft_list", [])
+
+    if not platforms:
+        st.info("No platforms configured yet.")
+        return
+
+    summary_df = build_platform_summary(platforms)
+    st.dataframe(summary_df, width="stretch", hide_index=True)
+
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        platform_to_delete = st.selectbox(
+            "Select platform to remove",
+            options=[p.display_name for p in platforms],
+            key="delete_platform_select",
+        )
+    with col2:
+        if st.button("Delete Platform", type="secondary"):
+            st.session_state.platform_draft_list = [
+                p for p in platforms if p.display_name != platform_to_delete
+            ]
+            st.rerun()
+
 
 
 def is_platform_draft_ready() -> bool:
@@ -285,6 +314,7 @@ def main() -> None:
     Main function to run the platform creation view.
     """
     st.title("📊 Create Platforms")
+    render_platform_overview()
     platform_ready = render_platform_creation()
     sensor_ready = render_sensor_creation()
 
