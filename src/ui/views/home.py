@@ -181,7 +181,7 @@ def create_cfg_data() -> None:
 
 def main() -> None:
     """Render the home page."""
-    st.title(":passenger_ship: :game_die: Run Monte Carlo")
+    st.title(":game_die: Run Monte Carlo :game_die:")
     st.write(
         "To run the Monte Carlo simulation, first create at least one Red and one Blue platform."
     )

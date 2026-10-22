@@ -225,7 +225,7 @@ def render_analytics_tab(
 
 
 def main() -> None:
-    st.title("Results")
+    st.title("📊 Results 📊")
 
     run_folders = list_run_folders()
     if not run_folders:

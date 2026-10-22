@@ -22,15 +22,15 @@ def establish_pages() -> None:
     Establishes the pages for the Streamlit application.
     """
     st.set_page_config(
-        page_title="Monte Carlo Simulation",
-        page_icon=":game_die:",
+        page_title="MAKO",
+        page_icon=":shark:",
         layout="wide",
         initial_sidebar_state="expanded",
     )
 
     home_page = st.Page(
         page="src/ui/views/home.py",
-        default=True,
+        default=False,
         title="Run Monte Carlo Simulation",
     )
 
@@ -54,7 +54,7 @@ def establish_pages() -> None:
 
     user_guide_page = st.Page(
         page="src/ui/views/user_guide.py",
-        default=False,
+        default=True,
         title="User Guide",
     )
 

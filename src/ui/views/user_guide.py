@@ -36,7 +36,7 @@ def render_markdown_with_image_fallbacks(content: str, base_dir: Path) -> None:
         full_image_path = (base_dir / rel_path).resolve()
 
         if full_image_path.exists() and full_image_path.is_file():
-            st.image(str(full_image_path), caption=alt_text, use_container_width=True)
+            st.image(str(full_image_path), caption=alt_text, width="content")
         else:
             with st.container(border=True):
                 st.caption(f"🖼️ **Screenshot Placeholder**: {alt_text}")
@@ -56,7 +56,6 @@ def render_markdown_with_image_fallbacks(content: str, base_dir: Path) -> None:
 def main() -> None:
     """Render the MAKO User Guide view."""
     st.title("🦈 MAKO User Guide")
-    st.caption("Monte-Carlo Agent Kinematics and Observation — Rapid Maritime Simulation Manual")
 
     if not GUIDE_PATH.exists():
         st.error(f"User guide file not found at `{GUIDE_PATH.resolve()}`.")

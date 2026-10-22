@@ -75,7 +75,7 @@ def render_sonobuoy_overview() -> None:
 
 def render_sonobuoy_creation() -> None:
     """Render the form and editors to configure field fusion and individual sonobuoys."""
-    st.markdown("## Multistatic Sonobuoy Configuration")
+    st.title("🙉 Create Sonobuoys (MSA) 🙉")
 
     # Banner notifying if no active Blue source is present
     if not _has_active_blue_source():

@@ -21,7 +21,7 @@ KM_TO_M = 1000.0
 
 def render_platform_overview() -> None:
     """Render the overview table and deletion controls for platforms."""
-    st.markdown("### Configured Platforms")
+    # st.title("Configured Platforms 🚢")
     platforms = st.session_state.get("platform_draft_list", [])
 
     if not platforms:
@@ -313,7 +313,7 @@ def main() -> None:
     """
     Main function to run the platform creation view.
     """
-    st.title("📊 Create Platforms")
+    st.title("🚢 Create Platforms 🚢")
     render_platform_overview()
     platform_ready = render_platform_creation()
     sensor_ready = render_sensor_creation()
