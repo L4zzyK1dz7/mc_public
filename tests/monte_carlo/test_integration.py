@@ -408,4 +408,61 @@ def test_int_07_multistatic_sonobuoy_simulation(tmp_path: Path):
     assert "sonobuoy_field" in summary_text
 
 
+def test_execute_monte_carlo_progress_callback():
+    """Verify progress_callback is called N times with (1..N, N)."""
+    cfg_data = make_test_config_data(replications=3, time_limit_sec=5.0)
+    calls: list[tuple[int, int]] = []
+
+    def mock_cb(completed: int, total: int) -> None:
+        calls.append((completed, total))
+
+    results = _execute_monte_carlo(
+        number_of_replications=3,
+        config_data=cfg_data,
+        seeds=[1, 2, 3],
+        progress_callback=mock_cb,
+    )
+
+    assert len(results) == 3
+    assert calls == [(1, 3), (2, 3), (3, 3)]
+
+
+def test_execute_monte_carlo_none_progress_callback():
+    """Verify progress_callback=None still works cleanly."""
+    cfg_data = make_test_config_data(replications=2, time_limit_sec=5.0)
+    results = _execute_monte_carlo(
+        number_of_replications=2,
+        config_data=cfg_data,
+        seeds=[1, 2],
+        progress_callback=None,
+    )
+    assert len(results) == 2
+
+
+def test_run_simulation_forwards_progress_callback(tmp_path: Path):
+    """Verify run_simulation forwards progress_callback to replication loop."""
+    scenario_dir = tmp_path / "scenario_cb"
+    scenario_dir.mkdir(parents=True, exist_ok=True)
+    cfg_data = make_test_config_data(replications=2, time_limit_sec=5.0)
+
+    cfg_dict = cfg_data.model_dump(mode="json")
+    for platform in cfg_dict["platforms"]:
+        platform["sensors"] = []
+
+    config_path = scenario_dir / "config.yaml"
+    with open(config_path, "w", encoding="utf-8") as f:
+        yaml.dump(cfg_dict, f)
+
+    output_dir = tmp_path / "cb_outcomes"
+    calls: list[tuple[int, int]] = []
+
+    def mock_cb(completed: int, total: int) -> None:
+        calls.append((completed, total))
+
+    ret = run_simulation(config_path, output_dir=output_dir, progress_callback=mock_cb)
+    assert ret == 0
+    assert calls == [(1, 2), (2, 2)]
+
+
+
 

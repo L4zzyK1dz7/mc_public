@@ -3,9 +3,11 @@ from __future__ import annotations
 import logging
 import shutil
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Callable, Optional
 
 import numpy as np
+
+ProgressCallback = Callable[[int, int], None]
 
 from src.monte_carlo.configuration.load_configuration import (
     load_config_from_yaml,
@@ -257,6 +259,7 @@ def _execute_monte_carlo(
     number_of_replications: int,
     config_data: ConfigData,
     seeds: Optional[list[int]] = None,
+    progress_callback: Optional[ProgressCallback] = None,
 ) -> SimulationResults:
     """
     Execute the complete Monte Carlo simulation until an end condition is met.
@@ -282,11 +285,17 @@ def _execute_monte_carlo(
         # Store the replication result
         simulation_results.append({replication_id: replication_result})
 
+        if progress_callback is not None:
+            progress_callback(replication_id + 1, number_of_replications)
+
     return simulation_results  # Replace with actual aggregation of results
 
 
 def run_simulation(
-    config_path: Path, output_dir: Optional[Path] = None, verbose: bool = False
+    config_path: Path,
+    output_dir: Optional[Path] = None,
+    verbose: bool = False,
+    progress_callback: Optional[ProgressCallback] = None,
 ) -> int:
     """
     Orchestrate the Monte Carlo simulation by performing the following steps:
@@ -299,6 +308,7 @@ def run_simulation(
         config_path: Path to the config.yaml file.
         output_dir: Optional directory for output files. Defaults to data/outputs.
         verbose: If True, print DEBUG level logs.
+        progress_callback: Optional callback invoked as progress_callback(completed, total) after each replication.
 
     Returns:
         0 if successful, 1 if error occurred.
@@ -365,7 +375,10 @@ def run_simulation(
 
     # === 3. Run Main Monte Carlo simulation ===
     simulation_results = _execute_monte_carlo(
-        config_data.simulation.replications, seeds=seeds, config_data=config_data
+        config_data.simulation.replications,
+        seeds=seeds,
+        config_data=config_data,
+        progress_callback=progress_callback,
     )
 
     # === 4. Aggregate and Output the simulation results ===
