@@ -116,11 +116,7 @@ def _render_manual_editor(
 ) -> None:
     sensor_type = str(sensor_data_payload.get("sensor_type", "generic"))
     x_label = _x_axis_label(sensor_type)
-    caption_text = (
-        "Provide distance_m and pod rows. POD must be between 0 and 1."
-        if x_label == "distance_m"
-        else "Provide x_values and pod rows. POD must be between 0 and 1."
-    )
+    caption_text = f"Provide {x_label} and pod rows. POD must be between 0 and 1."
     with st.form(key=f"sensor_manual_form_{index}", clear_on_submit=False):
         st.caption(caption_text)
 
@@ -130,11 +126,12 @@ def _render_manual_editor(
             "pod": sensor_data_payload.get("pod", []),
         }
 
-        help_text = (
-            "Distance in metres from the sensor."
-            if x_label == "distance_m"
-            else "Independent variable (e.g. range or time)."
-        )
+        if x_label == "distance_m":
+            help_text = "Distance in metres from the sensor."
+        elif x_label == "time_late_hours":
+            help_text = "Trail age in hours since platform passage."
+        else:
+            help_text = "Independent variable (e.g. range or time)."
 
         sensor_table = st.data_editor(
             pd.DataFrame(default_table),

@@ -13,10 +13,13 @@ from src.monte_carlo.detection_pipeline.strategies.base import SensorDetectionSt
 from src.monte_carlo.detection_pipeline.strategies.generic import (
     GenericSensorDetectionStrategy,
 )
+from src.monte_carlo.detection_pipeline.strategies.specific import (
+    SpecificSensorDetectionStrategy,
+)
 
 _STRATEGIES: dict[str, SensorDetectionStrategy] = {
     "generic": GenericSensorDetectionStrategy(),
-    # "specific": SpecificSensorDetectionStrategy(),  # register once implemented
+    "specific": SpecificSensorDetectionStrategy(),
 }
 
 

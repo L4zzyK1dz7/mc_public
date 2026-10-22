@@ -8,6 +8,9 @@ from src.monte_carlo.detection_pipeline.strategies.generic import (
     GenericSensorDetectionStrategy,
 )
 from src.monte_carlo.detection_pipeline.strategies.registry import get_strategy
+from src.monte_carlo.detection_pipeline.strategies.specific import (
+    SpecificSensorDetectionStrategy,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -15,6 +18,11 @@ pytestmark = pytest.mark.unit
 def test_generic_sensor_type_resolves_to_generic_strategy():
     strategy = get_strategy("generic")
     assert isinstance(strategy, GenericSensorDetectionStrategy)
+
+
+def test_specific_sensor_type_resolves_to_specific_strategy():
+    strategy = get_strategy("specific")
+    assert isinstance(strategy, SpecificSensorDetectionStrategy)
 
 
 def test_unregistered_sensor_type_returns_none():

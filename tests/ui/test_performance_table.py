@@ -15,7 +15,8 @@ from src.ui.services.performance_table import (
 def test_x_axis_label():
     assert x_axis_label("generic") == "distance_m"
     assert x_axis_label("GENERIC") == "distance_m"
-    assert x_axis_label("specific") == "x_values"
+    assert x_axis_label("specific") == "time_late_hours"
+    assert x_axis_label("SPECIFIC") == "time_late_hours"
     assert x_axis_label("") == "x_values"
 
 
@@ -25,6 +26,14 @@ def test_parse_sensor_csv_standard():
     assert msg is None
     assert list(parsed.columns) == ["x_values", "pod"]
     assert parsed["x_values"].tolist() == [10.0, 50.0]
+
+
+def test_parse_sensor_csv_specific():
+    df = pd.DataFrame({"time_late_hours": [1.0, 3.0], "pod": [0.9, 0.3]})
+    parsed, msg = parse_sensor_csv(df, "specific")
+    assert msg is None
+    assert list(parsed.columns) == ["x_values", "pod"]
+    assert parsed["x_values"].tolist() == [1.0, 3.0]
 
 
 def test_parse_sensor_csv_mapped_range():

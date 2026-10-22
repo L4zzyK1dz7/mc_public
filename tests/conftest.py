@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Iterable, Optional
 
+import numpy as np
 import pytest
 
 from src.monte_carlo.states.platform_states import PlatformState, WpProperties
@@ -22,12 +23,21 @@ class FakeRandomGen:
         self._values = list(values)
         self._index = 0
 
-    def random(self) -> float:
-        if self._index >= len(self._values):
-            raise AssertionError("FakeRandomGen exhausted - provide more values")
-        value = self._values[self._index]
-        self._index += 1
-        return value
+    def random(self, size: Optional[int] = None):
+        if size is None:
+            if self._index >= len(self._values):
+                raise AssertionError("FakeRandomGen exhausted - provide more values")
+            value = self._values[self._index]
+            self._index += 1
+            return value
+
+        res = []
+        for _ in range(size):
+            if self._index >= len(self._values):
+                raise AssertionError("FakeRandomGen exhausted - provide more values")
+            res.append(self._values[self._index])
+            self._index += 1
+        return np.array(res)
 
 
 def make_platform_state(

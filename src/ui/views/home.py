@@ -5,7 +5,6 @@ Home for streamlit application
 import logging
 from pathlib import Path
 
-import pandas as pd
 import streamlit as st
 
 from src.monte_carlo.monte_carlo import run_simulation

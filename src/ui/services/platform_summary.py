@@ -11,8 +11,7 @@ from typing import TYPE_CHECKING, Any
 import pandas as pd
 
 if TYPE_CHECKING:
-    from src.schemas.platform import PlatformConfig
-    from src.schemas.sonobuoy import SonobuoyConfig
+    pass
 
 MOVEMENT_LABEL_MAP: dict[str, str] = {
     "random_walk": "Random Walk",

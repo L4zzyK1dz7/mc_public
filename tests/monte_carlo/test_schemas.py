@@ -18,7 +18,7 @@ from src.schemas.movement import (
     Waypoint,
     IntruderEndCondition,
 )
-from src.schemas.sensor import GenericSensorConfig
+from src.schemas.sensor import GenericSensorConfig, SpecificSensorConfig
 from src.schemas.simulation import ConfigData, SimulationConfig, World
 from src.monte_carlo.configuration.load_configuration import (
     load_config_from_yaml,
@@ -661,4 +661,101 @@ def test_sch_15_sensor_csv_bool_parsing_and_round_trip(tmp_path: Path):
     assert legacy_sensor.active_source is False
     assert legacy_sensor.source_receiver_collocated is False
     assert legacy_sensor.can_detect is True
+
+
+# ==============================================================================
+# SCH-15: Specific sensor interval must equal simulation timestep
+# ==============================================================================
+def test_sch_15_specific_sensor_interval_matches_timestep_valid():
+    """Verify specific sensor passes when interval_time_sec == timestep_sec."""
+    sensor = SpecificSensorConfig(
+        display_name="TrailSensor",
+        interval_time_sec=10.0,
+        x_values=[0.0, 1.0],
+        pod=[1.0, 0.5],
+        k=1,
+        n=1,
+    )
+    platform = PlatformConfig(
+        platform_config_folder="blue_1",
+        display_name="Blue 1",
+        team="Blue",
+        speed_mps=10.0,
+        movement_type=RandomWalkMovement(),
+        sensors=[sensor],
+    )
+    config = ConfigData(
+        simulation=SimulationConfig(
+            replications=1,
+            time_limit_sec=100.0,
+            timestep_sec=10.0,
+            seeds_file=False,
+        ),
+        world=World(origin_x=0.0, origin_y=0.0, length=1000.0, height=1000.0),
+        platforms=[platform],
+    )
+    assert config.platforms[0].sensors[0].interval_time_sec == 10.0
+
+
+def test_sch_15_specific_sensor_interval_mismatch_raises():
+    """Verify specific sensor raises ValueError when interval_time_sec != timestep_sec."""
+    sensor = SpecificSensorConfig(
+        display_name="TrailSensor",
+        interval_time_sec=5.0,
+        x_values=[0.0, 1.0],
+        pod=[1.0, 0.5],
+        k=1,
+        n=1,
+    )
+    platform = PlatformConfig(
+        platform_config_folder="blue_1",
+        display_name="Blue 1",
+        team="Blue",
+        speed_mps=10.0,
+        movement_type=RandomWalkMovement(),
+        sensors=[sensor],
+    )
+    with pytest.raises(ValidationError, match="TrailSensor"):
+        ConfigData(
+            simulation=SimulationConfig(
+                replications=1,
+                time_limit_sec=100.0,
+                timestep_sec=10.0,
+                seeds_file=False,
+            ),
+            world=World(origin_x=0.0, origin_y=0.0, length=1000.0, height=1000.0),
+            platforms=[platform],
+        )
+
+
+def test_sch_15_generic_sensor_interval_mismatch_allowed():
+    """Verify generic sensor interval is independent of timestep_sec."""
+    sensor = GenericSensorConfig(
+        display_name="Radar",
+        interval_time_sec=5.0,
+        x_values=[100.0],
+        pod=[0.8],
+        k=1,
+        n=1,
+    )
+    platform = PlatformConfig(
+        platform_config_folder="blue_1",
+        display_name="Blue 1",
+        team="Blue",
+        speed_mps=10.0,
+        movement_type=RandomWalkMovement(),
+        sensors=[sensor],
+    )
+    # Different interval_time_sec (5.0) and timestep_sec (10.0) is allowed for generic
+    config = ConfigData(
+        simulation=SimulationConfig(
+            replications=1,
+            time_limit_sec=100.0,
+            timestep_sec=10.0,
+            seeds_file=False,
+        ),
+        world=World(origin_x=0.0, origin_y=0.0, length=1000.0, height=1000.0),
+        platforms=[platform],
+    )
+    assert config.platforms[0].sensors[0].interval_time_sec == 5.0
 

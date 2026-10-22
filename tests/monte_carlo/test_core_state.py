@@ -353,3 +353,89 @@ def test_sta_09_sensor_state_clean_reset():
     sensor_state.reset()
     assert sensor_state.next_eval_time_sec == 0.0
     assert len(sensor_state.hit_windows) == 0
+
+
+# ==============================================================================
+# STA-10: Trail instantiation and isolation across platform instances
+# ==============================================================================
+def test_sta_10_platform_trail_instantiation_and_isolation():
+    """Verify PlatformState trail is instantiated and isolated across instances."""
+    blueprint = PlatformConfig(
+        platform_config_folder="blue_1",
+        display_name="Blue Fighter",
+        team=Team.BLUE,
+        speed_mps=10.0,
+        movement_type=RandomWalkMovement(),
+        neutralised_platform_behaviour="stop",
+        sensors=[],
+    )
+    sim_config = SimulationConfig(
+        replications=1,
+        time_limit_sec=100.0,
+        timestep_sec=1.0,
+        seeds_file=False,
+    )
+    world = World(origin_x=0.0, origin_y=0.0, length=1000.0, height=1000.0)
+    config_data = ConfigData(
+        simulation=sim_config,
+        world=world,
+        platforms=[blueprint],
+    )
+
+    rng = np.random.default_rng(12345)
+    states_rep1 = initialise_platform_states(config_data, rng)
+    states_rep2 = initialise_platform_states(config_data, rng)
+
+    p1 = states_rep1[0]
+    p2 = states_rep2[0]
+
+    assert p1.trail is not p2.trail
+    p1.trail.record(0.0, Waypoint(0.0, 0.0))
+    assert len(p1.trail) == 1
+    assert len(p2.trail) == 0
+
+
+# ==============================================================================
+# STA-11: Trail recording step-by-step (t=0 and each step)
+# ==============================================================================
+def test_sta_11_trail_length_step_advancement():
+    """Verify trail records at t=0 and after each advance_step (steps + 1 total)."""
+    blueprint = PlatformConfig(
+        platform_config_folder="blue_1",
+        display_name="Blue Fighter",
+        team=Team.BLUE,
+        speed_mps=10.0,
+        movement_type=RandomWalkMovement(),
+        neutralised_platform_behaviour="stop",
+        sensors=[],
+    )
+    sim_config = SimulationConfig(
+        replications=1,
+        time_limit_sec=30.0,
+        timestep_sec=10.0,
+        seeds_file=False,
+    )
+    world = World(origin_x=0.0, origin_y=0.0, length=1000.0, height=1000.0)
+    config_data = ConfigData(
+        simulation=sim_config,
+        world=world,
+        platforms=[blueprint],
+    )
+
+    rng = np.random.default_rng(12345)
+    states = initialise_platform_states(config_data, rng)
+    platform = states[0]
+
+    # t=0 record
+    platform.trail.record(0.0, platform.pos)
+    assert len(platform.trail) == 1
+
+    # 3 simulation steps
+    for step in range(3):
+        t = (step + 1) * 10.0
+        platform.advance_step(t, config_data, rng)
+        platform.trail.record(t, platform.pos)
+
+    # 3 steps + 1 initial = 4 recorded positions
+    assert len(platform.trail) == 4
+    assert platform.trail.times_sec == [0.0, 10.0, 20.0, 30.0]

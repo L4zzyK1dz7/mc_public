@@ -38,11 +38,11 @@ flowchart LR
    ```python
    _STRATEGIES = {
        "generic": GenericSensorDetectionStrategy(),
-       "specific": SpecificSensorDetectionStrategy(),  # <- just this
+       "specific": SpecificSensorDetectionStrategy(),
    }
    ```
 
-3. **`base.py` (contract) + `generic.py` (algorithm)** — `SensorDetectionStrategy` is the abstract shape every algorithm must have (one method: `detect(...)`). `GenericSensorDetectionStrategy` is the only place that actually knows about FOV, PoD, sliding windows, k-of-n. If that logic is wrong, you edit exactly one file, and no other sensor type's code is at risk.
+3. **`base.py` (contract) + `generic.py` / `specific.py` (algorithms)** — `SensorDetectionStrategy` is the abstract shape every algorithm must have (one method: `detect(...)`). `GenericSensorDetectionStrategy` evaluates range, FOV, PoD, and sliding windows. `SpecificSensorDetectionStrategy` evaluates trail crossings, trail age lookup (`time_late_hours`), and per-crossing $k$-of-$n$ rolls. If a sensor type's logic changes, you edit exactly that strategy file, and no other sensor type's code is at risk.
 
 ### Why not just put `detect()` methods on the Pydantic schema classes?
 
@@ -61,4 +61,4 @@ You might notice `movement.py` already does this — `RandomWalkMovement.get_nex
 | **I**SP | The interface has exactly one method — no strategy is forced to implement things it doesn't need. |
 | **D**IP | `pipeline.py` depends on the abstract `SensorDetectionStrategy`, not on `GenericSensorDetectionStrategy` directly — that binding happens only inside `registry.py`. |
 
-If you want, I can sketch what a second sensor type (`specific`) would look like end-to-end to make the "just add a file" claim concrete.
+Both `generic` and `specific` sensor types follow this exact pattern, validating that adding detection algorithms requires zero changes to the orchestrator.

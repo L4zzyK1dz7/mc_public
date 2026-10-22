@@ -18,9 +18,9 @@ from src.monte_carlo.output.aggregate_results import aggregate_and_output_result
 from src.monte_carlo.output.outcome_detection_manager import OutcomeDetectionManager
 from src.monte_carlo.output.outcome_position_manager import OutcomePositionManager
 from src.monte_carlo.configuration.load_configuration import load_seeds
-from src.schemas.movement import RandomWalkMovement
+from src.schemas.movement import RandomWalkMovement, UserDefinedWaypointsMovement, Waypoint
 from src.schemas.platform import PlatformConfig, Team
-from src.schemas.sensor import GenericSensorConfig
+from src.schemas.sensor import GenericSensorConfig, SpecificSensorConfig
 from src.schemas.simulation import ConfigData, SimulationConfig, World
 
 
@@ -462,6 +462,119 @@ def test_run_simulation_forwards_progress_callback(tmp_path: Path):
     ret = run_simulation(config_path, output_dir=output_dir, progress_callback=mock_cb)
     assert ret == 0
     assert calls == [(1, 2), (2, 2)]
+
+
+# ==============================================================================
+# INT-07: Deterministic trail crossing detection with specific sensor
+# ==============================================================================
+def test_int_07_specific_sensor_trail_crossing_integration():
+    """Verify deterministic crossing scenario ends with initial_detection."""
+    sensor = SpecificSensorConfig(
+        display_name="SpecificSensor",
+        interval_time_sec=10.0,
+        x_values=[0.0, 1.0],  # 0 to 1 hour
+        pod=[1.0, 1.0],
+        k=1,
+        n=1,
+    )
+    blue_platform = PlatformConfig(
+        platform_config_folder="blue_1",
+        display_name="Blue 1",
+        team=Team.BLUE,
+        speed_mps=10.0,
+        movement_type=UserDefinedWaypointsMovement(
+            waypoints=[Waypoint(x=50.0, y=0.0), Waypoint(x=50.0, y=100.0)]
+        ),
+        neutralised_platform_behaviour="stop",
+        sensors=[sensor],
+    )
+    red_platform = PlatformConfig(
+        platform_config_folder="red_1",
+        display_name="Red 1",
+        team=Team.RED,
+        speed_mps=10.0,
+        movement_type=UserDefinedWaypointsMovement(
+            waypoints=[Waypoint(x=0.0, y=50.0), Waypoint(x=100.0, y=50.0)]
+        ),
+        neutralised_platform_behaviour="stop",
+        sensors=[],
+    )
+    config_data = ConfigData(
+        simulation=SimulationConfig(
+            replications=1,
+            time_limit_sec=20.0,
+            timestep_sec=10.0,
+            seeds_file=False,
+            detection_end_condition="initial_detection",
+        ),
+        world=World(origin_x=0.0, origin_y=0.0, length=1000.0, height=1000.0),
+        platforms=[blue_platform, red_platform],
+    )
+    outcome_manager = OutcomePositionManager(0)
+    detection_manager = OutcomeDetectionManager(0)
+    res = _execute_single_replication(
+        config_data, outcome_manager, detection_manager, seed=42
+    )
+
+    assert res["end_condition"] == "detection"
+    assert res["result"] == "detected"
+
+
+# ==============================================================================
+# INT-08: Expired trail skips detection (same geometry, table ends earlier)
+# ==============================================================================
+def test_int_08_specific_sensor_expired_trail_no_detection():
+    """Verify same geometry does not detect when red trail segment is older than table."""
+    # Table ends at 0.001 hours = 3.6 seconds, but crossing happens at t=10s (age = 10s = 0.00277h)
+    sensor = SpecificSensorConfig(
+        display_name="SpecificSensor",
+        interval_time_sec=10.0,
+        x_values=[0.0, 0.001],
+        pod=[1.0, 1.0],
+        k=1,
+        n=1,
+    )
+    blue_platform = PlatformConfig(
+        platform_config_folder="blue_1",
+        display_name="Blue 1",
+        team=Team.BLUE,
+        speed_mps=10.0,
+        movement_type=UserDefinedWaypointsMovement(
+            waypoints=[Waypoint(x=50.0, y=0.0), Waypoint(x=50.0, y=100.0)]
+        ),
+        neutralised_platform_behaviour="stop",
+        sensors=[sensor],
+    )
+    red_platform = PlatformConfig(
+        platform_config_folder="red_1",
+        display_name="Red 1",
+        team=Team.RED,
+        speed_mps=10.0,
+        movement_type=UserDefinedWaypointsMovement(
+            waypoints=[Waypoint(x=0.0, y=50.0), Waypoint(x=100.0, y=50.0)]
+        ),
+        neutralised_platform_behaviour="stop",
+        sensors=[],
+    )
+    config_data = ConfigData(
+        simulation=SimulationConfig(
+            replications=1,
+            time_limit_sec=20.0,
+            timestep_sec=10.0,
+            seeds_file=False,
+            detection_end_condition="initial_detection",
+        ),
+        world=World(origin_x=0.0, origin_y=0.0, length=1000.0, height=1000.0),
+        platforms=[blue_platform, red_platform],
+    )
+    outcome_manager = OutcomePositionManager(0)
+    detection_manager = OutcomeDetectionManager(0)
+    res = _execute_single_replication(
+        config_data, outcome_manager, detection_manager, seed=42
+    )
+
+    assert res["end_condition"] == "time_limit"
+    assert res["result"] == "not_detected"
 
 
 

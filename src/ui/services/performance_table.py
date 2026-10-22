@@ -10,8 +10,11 @@ import pandas as pd
 
 def x_axis_label(sensor_type: str) -> str:
     """Return the label for the independent variable column depending on sensor type."""
-    if (sensor_type or "").lower() == "generic":
+    stype = (sensor_type or "").lower()
+    if stype == "generic":
         return "distance_m"
+    if stype == "specific":
+        return "time_late_hours"
     return "x_values"
 
 
@@ -22,7 +25,7 @@ def parse_sensor_csv(
     """Normalise a sensor CSV into x_values and pod columns."""
     target_x_col = x_axis_label(sensor_type)
 
-    for col_name in [target_x_col, "distance_m", "range_m", "x_values"]:
+    for col_name in [target_x_col, "distance_m", "range_m", "time_late_hours", "x_values"]:
         if {col_name, "pod"}.issubset(sensor_table.columns):
             parsed = sensor_table[[col_name, "pod"]].copy()
             parsed.columns = ["x_values", "pod"]
@@ -40,7 +43,7 @@ def parse_sensor_csv(
 
     return (
         pd.DataFrame(),
-        f"CSV must include {target_x_col} (or range_m/x_values) and pod columns, or at least two numeric columns.",
+        f"CSV must include {target_x_col} (or range_m/time_late_hours/x_values) and pod columns, or at least two numeric columns.",
     )
 
 

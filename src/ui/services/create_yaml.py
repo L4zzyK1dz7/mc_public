@@ -74,6 +74,7 @@ def create_sensor_file(
     """
     sensor_file = platform_path / "sensors" / sensor.type / f"{sensor.display_name}.csv"
     try:
+        sensor_file.parent.mkdir(parents=True, exist_ok=True)
         sensor_dict = sensor.model_dump()
         table_fields = {"x_values", "pod"}
         x_values = sensor_dict.pop("x_values")
@@ -82,7 +83,7 @@ def create_sensor_file(
         # if generic x_values is set to distance_m
         x_values_label = "distance_m"
         if sensor.type == "specific":
-            x_values_label = "x_value"
+            x_values_label = "time_late_hours"
 
         with open(sensor_file, "w", newline="") as f:
             # Metadata comment header for every field except the x_values/pod table

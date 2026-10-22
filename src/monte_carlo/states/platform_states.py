@@ -16,6 +16,7 @@ from src.monte_carlo.states.movement_state import (
     create_movement_state,
     create_movement_strategy,
 )
+from src.monte_carlo.states.trail import PositionTrail
 from src.schemas.movement import Waypoint
 
 if TYPE_CHECKING:
@@ -117,6 +118,7 @@ class PlatformState:
     # Per-sensor active ping timing keyed by id(sensor): next_ping_time_sec
     ping_states: dict[int, float] = field(default_factory=dict)
     neutralized: bool = False
+    trail: PositionTrail = field(default_factory=PositionTrail)
 
 
     # -------------------------------------------------------------------

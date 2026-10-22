@@ -16,7 +16,6 @@ from src.ui.services.performance_table import (
     parse_sensor_csv,
 )
 from src.ui.services.platform_summary import (
-    build_sonobuoy_summary,
     build_sonobuoy_summary as _build_sonobuoy_summary,
 )
 from src.ui.user_notifier import success

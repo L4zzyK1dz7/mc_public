@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import Mock
 import pandas as pd
-import pytest
 
 from src.schemas.movement import (
     BarrierPatrollerMovement,
@@ -15,7 +13,6 @@ from src.schemas.platform import PlatformConfig, Team
 from src.schemas.sensor import GenericSensorConfig
 from src.schemas.sonobuoy import SonobuoyConfig
 from src.ui.services.platform_summary import (
-    MOVEMENT_LABEL_MAP,
     build_platform_summary,
     build_sonobuoy_summary,
 )

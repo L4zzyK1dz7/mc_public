@@ -7,8 +7,6 @@ from typing import TYPE_CHECKING, Callable, Optional
 
 import numpy as np
 
-ProgressCallback = Callable[[int, int], None]
-
 from src.monte_carlo.configuration.load_configuration import (
     load_config_from_yaml,
     load_seeds,
@@ -55,6 +53,8 @@ if TYPE_CHECKING:
 # Initialise logging
 logger = logging.getLogger(__name__)
 
+ProgressCallback = Callable[[int, int], None]
+
 
 def _execute_single_replication(
     config_data: ConfigData,
@@ -85,6 +85,9 @@ def _execute_single_replication(
     outcome_manager.record_initial_positions(platform_states)
     detection_manager.seed_pairs(platform_states, config_data.sonobuoys)
 
+    for platform in platform_states:
+        platform.trail.record(0.0, platform.pos)
+
     # Calculate number of total timesteps
     max_steps = int(
         round(
@@ -112,6 +115,7 @@ def _execute_single_replication(
         for platform in platform_states:
             if platform.advance_step(sim_time_sec, config_data, random_gen):
                 outcome_manager.record_waypoint_generated(platform, sim_time_sec)
+            platform.trail.record(sim_time_sec, platform.pos)
 
         # Perform detection based on the current platform states. Every platform/sensor/
         # target combination is evaluated exhaustively, so this may report more than one

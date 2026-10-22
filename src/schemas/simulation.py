@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from typing import Literal, Optional
 
 
@@ -110,6 +111,22 @@ class ConfigData(BaseModel):
                     self.sonobuoy_field.data_fusion_requirement,
                     len(participating_buoys),
                 )
+        for platform in self.platforms:
+            for sensor in platform.sensors:
+                if sensor.type == "specific":
+                    if not math.isclose(
+                        sensor.interval_time_sec,
+                        self.simulation.timestep_sec,
+                        rel_tol=1e-9,
+                        abs_tol=1e-9,
+                    ):
+                        raise ValueError(
+                            f"Platform '{platform.display_name}' sensor '{sensor.display_name}' "
+                            f"has interval_time_sec={sensor.interval_time_sec}, but specific sensors "
+                            f"require interval_time_sec to equal simulation.timestep_sec "
+                            f"({self.simulation.timestep_sec})."
+                        )
+
         return self
 
     @classmethod

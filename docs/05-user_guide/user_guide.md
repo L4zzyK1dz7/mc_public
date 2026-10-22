@@ -31,8 +31,9 @@ MAKO is simulated in a two-dimensional Cartesian plane ($X$ and $Y$ measured in 
 * **What is not modelled**: Ocean bathymetry, water column depth layers (thermoclines), 3D diving depth, and bottom reverberation. Post detection manoeuvres.
 
 ### 2.2 Empirical Probability of Detection (PoD)
-Sensors in MAKO do not compute raw acoustic wave propagation or radar cross-section physics from scratch. Instead, they evaluate detection using empirical **Probability of Detection (PoD) vs. Range curves** taken from other predictive models. 
-For a **Generic** sensor, at each simulation time-step, MAKO calculates the distance between the detector's sensor and the target's position and uses the sensor's performance data as a lookup table to evaluate the PoD (probabilistic value between 0 and 1) for that given range and the sensor's FOV. Once the PoD value is determined, MAKO rolls a random number to determine if contact was made.
+Sensors in MAKO do not compute raw acoustic wave propagation or radar cross-section physics from scratch. Instead, they evaluate detection using empirical **Probability of Detection (PoD)** lookup curves taken from other predictive models:
+* **Generic Sensors (Range-Based)**: At each simulation timestep, MAKO calculates the straight-line distance between the detector and the target and evaluates whether the target falls within the sensor's FOV. It uses the sensor's performance table (`distance_m` vs `pod`) to evaluate PoD and rolls against a $k$-of-$n$ sliding window.
+* **Specific Sensors (Trail Crossing)**: Models platforms detecting opponents when their current step segment crosses a historical trail segment of an opposing target. Its performance table defines `time_late_hours` vs `pod`, judging the detection probability by the age of the crossed trail segment. If an intersection occurs, an independent $k$-of-$n$ trial is rolled for that crossing. To guarantee continuous path coverage without gaps, specific sensors require `interval_time_sec` to match the global simulation `timestep_sec`.
 
 ### 2.3 Hunter and Target Balance
 You must define **at least one Red platform** (Target/Intruder) and **at least one Blue platform** (Hunter/Detector) before MAKO will allow you to run the Monte-Carlo.
