@@ -150,6 +150,10 @@ def test_sta_03_state_lockdown_on_neutralisation():
     )
     rng = np.random.default_rng(42)
 
+    # Not neutralised: effective speed matches configured speed
+    assert platform.effective_speed_mps == 10.0
+    assert platform.speed_mps == 10.0
+
     # Step 1: active movement
     platform.advance_step(sim_time_sec=1.0, config_data=config_data, random_gen=rng)
     assert platform.pos.x == pytest.approx(10.0)
@@ -157,11 +161,67 @@ def test_sta_03_state_lockdown_on_neutralisation():
     # Now neutralise the platform
     platform.neutralized = True
     assert platform.neutralised is True
+    assert platform.effective_speed_mps == 0.0
+    assert platform.speed_mps == 10.0
+    assert platform.blueprint.speed_mps == 10.0
 
     # Step 2: should be halted
     gen = platform.advance_step(sim_time_sec=2.0, config_data=config_data, random_gen=rng)
     assert gen is False
     assert platform.pos.x == pytest.approx(10.0)  # Positional lockdown maintained
+
+
+def test_sta_03_continue_behaviour_on_neutralisation():
+    """Verify entity continues moving at full speed when neutralized=True with behaviour='continue'."""
+    blueprint = PlatformConfig(
+        platform_config_folder="blue_1",
+        display_name="Blue 1",
+        team="Blue",
+        speed_mps=10.0,
+        movement_type=RandomWalkMovement(),
+        neutralised_platform_behaviour="continue",
+        sensors=[],
+    )
+    wp_props = WpProperties(
+        pos=Waypoint(x=100.0, y=0.0),
+        arrival_time=10.0,
+        distance=100.0,
+        heading=np.array([1.0, 0.0]),
+        total_duration=10.0,
+        step_distance=10.0,
+    )
+    platform = PlatformState.from_blueprint(
+        platform_id="Blue_1",
+        blueprint=blueprint,
+        initial_pos=Waypoint(x=0.0, y=0.0),
+        wp_properties=wp_props,
+    )
+    config_data = ConfigData(
+        simulation=SimulationConfig(
+            replications=1, time_limit_sec=100.0, timestep_sec=1.0, seeds_file=False
+        ),
+        world=World(length=1000.0, height=1000.0),
+        platforms=[blueprint],
+    )
+    rng = np.random.default_rng(42)
+
+    assert platform.effective_speed_mps == 10.0
+    assert platform.speed_mps == 10.0
+
+    # Step 1: active movement
+    platform.advance_step(sim_time_sec=1.0, config_data=config_data, random_gen=rng)
+    assert platform.pos.x == pytest.approx(10.0)
+
+    # Neutralise with 'continue' behaviour
+    platform.neutralised = True
+    assert platform.neutralised is True
+    assert platform.effective_speed_mps == 10.0
+    assert platform.speed_mps == 10.0
+    assert platform.blueprint.speed_mps == 10.0
+
+    # Step 2: continues moving
+    platform.advance_step(sim_time_sec=2.0, config_data=config_data, random_gen=rng)
+    assert platform.pos.x == pytest.approx(20.0)
 
 
 # ==============================================================================

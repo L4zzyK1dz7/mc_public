@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import numpy as np
+import pytest
 import yaml
 
 from src.monte_carlo.monte_carlo import (
@@ -18,10 +19,16 @@ from src.monte_carlo.output.aggregate_results import aggregate_and_output_result
 from src.monte_carlo.output.outcome_detection_manager import OutcomeDetectionManager
 from src.monte_carlo.output.outcome_position_manager import OutcomePositionManager
 from src.monte_carlo.configuration.load_configuration import load_seeds
-from src.schemas.movement import RandomWalkMovement, UserDefinedWaypointsMovement, Waypoint
+from src.schemas.movement import (
+    IntruderSearchMovement,
+    RandomWalkMovement,
+    UserDefinedWaypointsMovement,
+    Waypoint,
+)
 from src.schemas.platform import PlatformConfig, Team
 from src.schemas.sensor import GenericSensorConfig, SpecificSensorConfig
 from src.schemas.simulation import ConfigData, SimulationConfig, World
+from src.schemas.sonobuoy import SonobuoyConfig, SonobuoyFieldConfig
 
 
 def make_test_config_data(
@@ -575,6 +582,569 @@ def test_int_08_specific_sensor_expired_trail_no_detection():
 
     assert res["end_condition"] == "time_limit"
     assert res["result"] == "not_detected"
+
+
+# ==============================================================================
+# INT-09: Team Detection - Stop Behaviour Freezes Detected Platform
+# ==============================================================================
+def test_int_09_team_detection_stop_freezes_detected_platform():
+    """Verify detected platform with behaviour='stop' halts while simulation continues."""
+    sensor = GenericSensorConfig(
+        display_name="Radar",
+        interval_time_sec=1.0,
+        x_values=[0.0, 500.0],
+        pod=[1.0, 1.0],
+        type="generic",
+        k=1,
+        n=1,
+        fov_start_deg=0.0,
+        fov_end_deg=360.0,
+    )
+    blue = PlatformConfig(
+        platform_config_folder="blue_1",
+        display_name="Blue 1",
+        team=Team.BLUE,
+        speed_mps=10.0,
+        movement_type=UserDefinedWaypointsMovement(
+            waypoints=[Waypoint(x=0.0, y=0.0), Waypoint(x=100.0, y=0.0)]
+        ),
+        neutralised_platform_behaviour="stop",
+        sensors=[sensor],
+    )
+    red_1 = PlatformConfig(
+        platform_config_folder="red_1",
+        display_name="Red 1",
+        team=Team.RED,
+        speed_mps=10.0,
+        movement_type=UserDefinedWaypointsMovement(
+            waypoints=[Waypoint(x=50.0, y=0.0), Waypoint(x=200.0, y=0.0)]
+        ),
+        neutralised_platform_behaviour="stop",
+        sensors=[],
+    )
+    red_2 = PlatformConfig(
+        platform_config_folder="red_2",
+        display_name="Red 2",
+        team=Team.RED,
+        speed_mps=10.0,
+        movement_type=UserDefinedWaypointsMovement(
+            waypoints=[Waypoint(x=5000.0, y=5000.0), Waypoint(x=6000.0, y=5000.0)]
+        ),
+        neutralised_platform_behaviour="stop",
+        sensors=[],
+    )
+    config_data = ConfigData(
+        simulation=SimulationConfig(
+            replications=1,
+            time_limit_sec=5.0,
+            timestep_sec=1.0,
+            seeds_file=False,
+            detection_end_condition="team_detection",
+        ),
+        world=World(origin_x=0.0, origin_y=0.0, length=10000.0, height=10000.0),
+        platforms=[blue, red_1, red_2],
+    )
+    outcome_manager = OutcomePositionManager(0)
+    detection_manager = OutcomeDetectionManager(0)
+    res = _execute_single_replication(
+        config_data, outcome_manager, detection_manager, seed=42
+    )
+
+    assert res["end_condition"] == "time_limit"
+
+    time_limit_events = [
+        e for e in res["platform_position_events"]
+        if (e.get("event_type") if isinstance(e, dict) else getattr(e, "event_type", None)) == "time_limit"
+    ]
+    red_1_final = next(
+        e for e in time_limit_events
+        if (e.get("platform_id") if isinstance(e, dict) else getattr(e, "platform_id", None)) == "Red_1"
+    )
+    red_2_final = next(
+        e for e in time_limit_events
+        if (e.get("platform_id") if isinstance(e, dict) else getattr(e, "platform_id", None)) == "Red_2"
+    )
+    red_1_x = red_1_final.get("pos_x") if isinstance(red_1_final, dict) else red_1_final.pos_x
+    red_2_x = red_2_final.get("pos_x") if isinstance(red_2_final, dict) else red_2_final.pos_x
+    # Red 1 moved in tick 1 to 60.0 then froze upon neutralisation
+    assert red_1_x == pytest.approx(60.0)
+    # Red 2 moved all 5 ticks (5000 + 50 = 5050.0)
+    assert red_2_x == pytest.approx(5050.0)
+
+    # Exactly one detection outcome for Red 1
+    red_1_det = [
+        row for row in res["detection_outcomes"]
+        if row["target_platform_id"] == "Red_1" and row["detection_outcome"] is True
+    ]
+    assert len(red_1_det) == 1
+    assert red_1_det[0]["detection_timestamp_sec"] == 1.0
+
+
+# ==============================================================================
+# INT-10: Team Detection - Continue Behaviour Keeps Moving, Single Detection
+# ==============================================================================
+def test_int_10_team_detection_continue_keeps_moving_single_detection():
+    """Verify detected platform with behaviour='continue' keeps moving and is not re-detected."""
+    sensor = GenericSensorConfig(
+        display_name="Radar",
+        interval_time_sec=1.0,
+        x_values=[0.0, 500.0],
+        pod=[1.0, 1.0],
+        type="generic",
+        k=1,
+        n=1,
+        fov_start_deg=0.0,
+        fov_end_deg=360.0,
+    )
+    blue = PlatformConfig(
+        platform_config_folder="blue_1",
+        display_name="Blue 1",
+        team=Team.BLUE,
+        speed_mps=10.0,
+        movement_type=UserDefinedWaypointsMovement(
+            waypoints=[Waypoint(x=0.0, y=0.0), Waypoint(x=100.0, y=0.0)]
+        ),
+        neutralised_platform_behaviour="stop",
+        sensors=[sensor],
+    )
+    red_1 = PlatformConfig(
+        platform_config_folder="red_1",
+        display_name="Red 1",
+        team=Team.RED,
+        speed_mps=10.0,
+        movement_type=UserDefinedWaypointsMovement(
+            waypoints=[Waypoint(x=50.0, y=0.0), Waypoint(x=200.0, y=0.0)]
+        ),
+        neutralised_platform_behaviour="continue",
+        sensors=[],
+    )
+    red_2 = PlatformConfig(
+        platform_config_folder="red_2",
+        display_name="Red 2",
+        team=Team.RED,
+        speed_mps=10.0,
+        movement_type=UserDefinedWaypointsMovement(
+            waypoints=[Waypoint(x=5000.0, y=5000.0), Waypoint(x=6000.0, y=5000.0)]
+        ),
+        neutralised_platform_behaviour="stop",
+        sensors=[],
+    )
+    config_data = ConfigData(
+        simulation=SimulationConfig(
+            replications=1,
+            time_limit_sec=5.0,
+            timestep_sec=1.0,
+            seeds_file=False,
+            detection_end_condition="team_detection",
+        ),
+        world=World(origin_x=0.0, origin_y=0.0, length=10000.0, height=10000.0),
+        platforms=[blue, red_1, red_2],
+    )
+    outcome_manager = OutcomePositionManager(0)
+    detection_manager = OutcomeDetectionManager(0)
+    res = _execute_single_replication(
+        config_data, outcome_manager, detection_manager, seed=42
+    )
+
+    assert res["end_condition"] == "time_limit"
+
+    time_limit_events = [
+        e for e in res["platform_position_events"]
+        if (e.get("event_type") if isinstance(e, dict) else getattr(e, "event_type", None)) == "time_limit"
+    ]
+    red_1_final = next(
+        e for e in time_limit_events
+        if (e.get("platform_id") if isinstance(e, dict) else getattr(e, "platform_id", None)) == "Red_1"
+    )
+    red_1_x = red_1_final.get("pos_x") if isinstance(red_1_final, dict) else red_1_final.pos_x
+    # Red 1 kept moving all 5 ticks (50 + 50 = 100.0)
+    assert red_1_x == pytest.approx(100.0)
+
+    # Exactly one detection outcome for Red 1
+    red_1_det = [
+        row for row in res["detection_outcomes"]
+        if row["target_platform_id"] == "Red_1" and row["detection_outcome"] is True
+    ]
+    assert len(red_1_det) == 1
+    assert red_1_det[0]["detection_timestamp_sec"] == 1.0
+
+
+# ==============================================================================
+# INT-11: Initial Detection - Neutralisation Flag Never Set
+# ==============================================================================
+def test_int_11_initial_detection_never_sets_neutralised():
+    """Verify initial_detection ends on first detection without neutralising platforms."""
+    sensor = GenericSensorConfig(
+        display_name="Radar",
+        interval_time_sec=1.0,
+        x_values=[0.0, 500.0],
+        pod=[1.0, 1.0],
+        type="generic",
+        k=1,
+        n=1,
+        fov_start_deg=0.0,
+        fov_end_deg=360.0,
+    )
+    blue = PlatformConfig(
+        platform_config_folder="blue_1",
+        display_name="Blue 1",
+        team=Team.BLUE,
+        speed_mps=10.0,
+        movement_type=UserDefinedWaypointsMovement(
+            waypoints=[Waypoint(x=0.0, y=0.0), Waypoint(x=100.0, y=0.0)]
+        ),
+        neutralised_platform_behaviour="stop",
+        sensors=[sensor],
+    )
+    red = PlatformConfig(
+        platform_config_folder="red_1",
+        display_name="Red 1",
+        team=Team.RED,
+        speed_mps=10.0,
+        movement_type=UserDefinedWaypointsMovement(
+            waypoints=[Waypoint(x=50.0, y=0.0), Waypoint(x=200.0, y=0.0)]
+        ),
+        neutralised_platform_behaviour="stop",
+        sensors=[],
+    )
+    config_data = ConfigData(
+        simulation=SimulationConfig(
+            replications=1,
+            time_limit_sec=10.0,
+            timestep_sec=1.0,
+            seeds_file=False,
+            detection_end_condition="initial_detection",
+        ),
+        world=World(origin_x=0.0, origin_y=0.0, length=10000.0, height=10000.0),
+        platforms=[blue, red],
+    )
+    outcome_manager = OutcomePositionManager(0)
+    detection_manager = OutcomeDetectionManager(0)
+    res = _execute_single_replication(
+        config_data, outcome_manager, detection_manager, seed=42
+    )
+
+    assert res["end_condition"] == "detection"
+    assert res["result"] == "detected"
+
+
+# ==============================================================================
+# INT-12: Full Team Detection Completes When All Targets Detected
+# ==============================================================================
+def test_int_12_team_detection_completes_when_all_targets_detected():
+    """Verify red_team_detection terminates when every platform on Red team is detected."""
+    sensor = GenericSensorConfig(
+        display_name="Radar",
+        interval_time_sec=1.0,
+        x_values=[0.0, 500.0],
+        pod=[1.0, 1.0],
+        type="generic",
+        k=1,
+        n=1,
+        fov_start_deg=0.0,
+        fov_end_deg=360.0,
+    )
+    blue = PlatformConfig(
+        platform_config_folder="blue_1",
+        display_name="Blue 1",
+        team=Team.BLUE,
+        speed_mps=10.0,
+        movement_type=UserDefinedWaypointsMovement(
+            waypoints=[Waypoint(x=0.0, y=0.0), Waypoint(x=2000.0, y=0.0)]
+        ),
+        neutralised_platform_behaviour="stop",
+        sensors=[sensor],
+    )
+    red_1 = PlatformConfig(
+        platform_config_folder="red_1",
+        display_name="Red 1",
+        team=Team.RED,
+        speed_mps=10.0,
+        movement_type=UserDefinedWaypointsMovement(
+            waypoints=[Waypoint(x=50.0, y=0.0), Waypoint(x=200.0, y=0.0)]
+        ),
+        neutralised_platform_behaviour="stop",
+        sensors=[],
+    )
+    red_2 = PlatformConfig(
+        platform_config_folder="red_2",
+        display_name="Red 2",
+        team=Team.RED,
+        speed_mps=0.0,
+        movement_type=UserDefinedWaypointsMovement(
+            waypoints=[Waypoint(x=100.0, y=0.0), Waypoint(x=100.0, y=0.0)]
+        ),
+        neutralised_platform_behaviour="stop",
+        sensors=[],
+    )
+    config_data = ConfigData(
+        simulation=SimulationConfig(
+            replications=1,
+            time_limit_sec=10.0,
+            timestep_sec=1.0,
+            seeds_file=False,
+            detection_end_condition="team_detection",
+        ),
+        world=World(origin_x=0.0, origin_y=0.0, length=10000.0, height=10000.0),
+        platforms=[blue, red_1, red_2],
+    )
+    outcome_manager = OutcomePositionManager(0)
+    detection_manager = OutcomeDetectionManager(0)
+    res = _execute_single_replication(
+        config_data, outcome_manager, detection_manager, seed=42
+    )
+
+    assert res["end_condition"] == "red_team_detection"
+    assert res["result"] == "detected"
+
+
+# ==============================================================================
+# INT-13: Neutralised Platform's Own Sensors Still Detect
+# ==============================================================================
+def test_int_13_neutralised_platform_sensors_still_detect():
+    """Verify neutralised platform can still detect opposing targets with its own sensors."""
+    blue_sensor = GenericSensorConfig(
+        display_name="Blue Radar",
+        interval_time_sec=1.0,
+        x_values=[0.0, 500.0],
+        pod=[1.0, 1.0],
+        type="generic",
+        k=1,
+        n=1,
+        fov_start_deg=0.0,
+        fov_end_deg=360.0,
+    )
+    red_sensor = GenericSensorConfig(
+        display_name="Red Sonar",
+        interval_time_sec=1.0,
+        x_values=[0.0, 500.0],
+        pod=[1.0, 1.0],
+        type="generic",
+        k=1,
+        n=1,
+        fov_start_deg=0.0,
+        fov_end_deg=360.0,
+    )
+    blue_1 = PlatformConfig(
+        platform_config_folder="blue_1",
+        display_name="Blue 1",
+        team=Team.BLUE,
+        speed_mps=10.0,
+        movement_type=UserDefinedWaypointsMovement(
+            waypoints=[Waypoint(x=50.0, y=0.0), Waypoint(x=200.0, y=0.0)]
+        ),
+        neutralised_platform_behaviour="continue",
+        sensors=[blue_sensor],
+    )
+    blue_2 = PlatformConfig(
+        platform_config_folder="blue_2",
+        display_name="Blue 2",
+        team=Team.BLUE,
+        speed_mps=10.0,
+        movement_type=UserDefinedWaypointsMovement(
+            waypoints=[Waypoint(x=5000.0, y=5000.0), Waypoint(x=6000.0, y=5000.0)]
+        ),
+        neutralised_platform_behaviour="stop",
+        sensors=[],
+    )
+    red = PlatformConfig(
+        platform_config_folder="red_1",
+        display_name="Red 1",
+        team=Team.RED,
+        speed_mps=10.0,
+        movement_type=UserDefinedWaypointsMovement(
+            waypoints=[Waypoint(x=0.0, y=0.0), Waypoint(x=100.0, y=0.0)]
+        ),
+        neutralised_platform_behaviour="stop",
+        sensors=[red_sensor],
+    )
+    config_data = ConfigData(
+        simulation=SimulationConfig(
+            replications=1,
+            time_limit_sec=5.0,
+            timestep_sec=1.0,
+            seeds_file=False,
+            detection_end_condition="team_detection",
+        ),
+        world=World(origin_x=0.0, origin_y=0.0, length=10000.0, height=10000.0),
+        platforms=[blue_1, blue_2, red],
+    )
+    outcome_manager = OutcomePositionManager(0)
+    detection_manager = OutcomeDetectionManager(0)
+    res = _execute_single_replication(
+        config_data, outcome_manager, detection_manager, seed=42
+    )
+
+    blue_1_detections = [
+        row for row in res["detection_outcomes"]
+        if row["detecting_platform_id"] == "Blue_1" and row["detection_outcome"] is True
+    ]
+    assert len(blue_1_detections) >= 1
+
+
+# ==============================================================================
+# INT-14: Sonobuoy Detected Platform Neutralised and Excluded
+# ==============================================================================
+def test_int_14_sonobuoy_detected_platform_neutralised_and_excluded():
+    """Verify red platform detected by sonobuoy is neutralised and excluded from further buoy hits."""
+    pinger = GenericSensorConfig(
+        display_name="Pinger",
+        interval_time_sec=1.0,
+        x_values=[0.0, 1000.0],
+        pod=[1.0, 1.0],
+        type="generic",
+        k=1,
+        n=1,
+        active_source=True,
+        can_detect=False,
+    )
+    blue = PlatformConfig(
+        platform_config_folder="blue_1",
+        display_name="Blue 1",
+        team=Team.BLUE,
+        speed_mps=0.0,
+        movement_type=UserDefinedWaypointsMovement(
+            waypoints=[Waypoint(x=0.0, y=0.0), Waypoint(x=0.0, y=0.0)]
+        ),
+        neutralised_platform_behaviour="stop",
+        sensors=[pinger],
+    )
+    red_1 = PlatformConfig(
+        platform_config_folder="red_1",
+        display_name="Red 1",
+        team=Team.RED,
+        speed_mps=10.0,
+        movement_type=UserDefinedWaypointsMovement(
+            waypoints=[Waypoint(x=50.0, y=0.0), Waypoint(x=200.0, y=0.0)]
+        ),
+        neutralised_platform_behaviour="stop",
+        sensors=[],
+    )
+    red_2 = PlatformConfig(
+        platform_config_folder="red_2",
+        display_name="Red 2",
+        team=Team.RED,
+        speed_mps=10.0,
+        movement_type=UserDefinedWaypointsMovement(
+            waypoints=[Waypoint(x=5000.0, y=5000.0), Waypoint(x=6000.0, y=5000.0)]
+        ),
+        neutralised_platform_behaviour="stop",
+        sensors=[],
+    )
+    buoy = SonobuoyConfig(
+        display_name="Buoy 1",
+        x_m=50.0,
+        y_m=0.0,
+        k=1,
+        n=1,
+        distance_m=[0.0, 1000.0],
+        pod=[1.0, 1.0],
+        evaluation_modes=["single_cycle"],
+    )
+    config_data = ConfigData(
+        simulation=SimulationConfig(
+            replications=1,
+            time_limit_sec=5.0,
+            timestep_sec=1.0,
+            seeds_file=False,
+            detection_end_condition="team_detection",
+        ),
+        world=World(origin_x=0.0, origin_y=0.0, length=10000.0, height=10000.0),
+        platforms=[blue, red_1, red_2],
+        sonobuoys=[buoy],
+        sonobuoy_field=SonobuoyFieldConfig(data_fusion_requirement=1),
+    )
+    outcome_manager = OutcomePositionManager(0)
+    detection_manager = OutcomeDetectionManager(0)
+    res = _execute_single_replication(
+        config_data, outcome_manager, detection_manager, seed=42
+    )
+
+    assert res["end_condition"] == "time_limit"
+
+    time_limit_events = [
+        e for e in res["platform_position_events"]
+        if (e.get("event_type") if isinstance(e, dict) else getattr(e, "event_type", None)) == "time_limit"
+    ]
+    red_1_final = next(
+        e for e in time_limit_events
+        if (e.get("platform_id") if isinstance(e, dict) else getattr(e, "platform_id", None)) == "Red_1"
+    )
+    red_1_x = red_1_final.get("pos_x") if isinstance(red_1_final, dict) else red_1_final.pos_x
+    # Red 1 was detected by sonobuoy at tick 1 and stopped at 60.0
+    assert red_1_x == pytest.approx(60.0)
+
+
+# ==============================================================================
+# INT-15: Team Detection - Continue Intruder Spatial Boundary Escape
+# ==============================================================================
+def test_int_15_team_detection_continue_intruder_escape():
+    """Verify detected 'continue' intruder crossing world boundary terminates as target_escaped."""
+    sensor = GenericSensorConfig(
+        display_name="Radar",
+        interval_time_sec=1.0,
+        x_values=[0.0, 500.0],
+        pod=[1.0, 1.0],
+        type="generic",
+        k=1,
+        n=1,
+        fov_start_deg=0.0,
+        fov_end_deg=360.0,
+    )
+    blue = PlatformConfig(
+        platform_config_folder="blue_1",
+        display_name="Blue 1",
+        team=Team.BLUE,
+        speed_mps=0.0,
+        movement_type=UserDefinedWaypointsMovement(
+            waypoints=[Waypoint(x=500.0, y=90.0), Waypoint(x=500.0, y=90.0)]
+        ),
+        neutralised_platform_behaviour="stop",
+        sensors=[sensor],
+    )
+    # Red 1 starts near top of world (height=100m, so spawns at y=100.0) and heads south towards y <= 0
+    # Blue is at (500, 90) so detects Red 1 right away
+    red_1 = PlatformConfig(
+        platform_config_folder="red_1",
+        display_name="Red 1",
+        team=Team.RED,
+        speed_mps=30.0,
+        movement_type=IntruderSearchMovement(start_distance_m=0.0),
+        neutralised_platform_behaviour="continue",
+        sensors=[],
+    )
+    # Red 2 is far away so team detection does not complete
+    red_2 = PlatformConfig(
+        platform_config_folder="red_2",
+        display_name="Red 2",
+        team=Team.RED,
+        speed_mps=0.0,
+        movement_type=UserDefinedWaypointsMovement(
+            waypoints=[Waypoint(x=5000.0, y=5000.0), Waypoint(x=5000.0, y=5000.0)]
+        ),
+        neutralised_platform_behaviour="stop",
+        sensors=[],
+    )
+    config_data = ConfigData(
+        simulation=SimulationConfig(
+            replications=1,
+            time_limit_sec=20.0,
+            timestep_sec=1.0,
+            seeds_file=False,
+            detection_end_condition="team_detection",
+        ),
+        world=World(origin_x=0.0, origin_y=0.0, length=1000.0, height=100.0),
+        platforms=[blue, red_1, red_2],
+    )
+    outcome_manager = OutcomePositionManager(0)
+    detection_manager = OutcomeDetectionManager(0)
+    res = _execute_single_replication(
+        config_data, outcome_manager, detection_manager, seed=42
+    )
+
+    assert res["end_condition"] == "target_escaped"
+    assert res["result"] == "not_detected"
+
 
 
 

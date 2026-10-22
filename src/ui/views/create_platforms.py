@@ -228,7 +228,12 @@ def render_platform_creation() -> bool:
             "Continue",
         ],
         key="platform_neutralised_behaviour",
-        help="Required for Team Detection. Determines how the platform behaves when neutralised.",
+        help=(
+            "Only applies when Detection End Condition is 'team_detection'. "
+            "Determines how the platform behaves when detected: 'Stop' halts all "
+            "translation at the terminal position; 'Continue' maintains full speed. "
+            "In both cases, a neutralised platform cannot be detected again."
+        ),
     )
 
     platform_movement_config = render_platform_movement_inputs(platform_movement_type)

@@ -103,3 +103,17 @@ def test_detect_returns_empty_list_when_strategy_finds_nothing(
     red = platform_factory("Red_1", team="Red")
 
     assert pipeline.detect([blue, red], current_time_sec=0.0, random_gen=None) == []
+
+
+def test_detect_excludes_neutralised_target(platform_factory, monkeypatch):
+    fake_strategy = FakeStrategy(produce_events=True)
+    monkeypatch.setattr(pipeline, "get_strategy", lambda sensor_type: fake_strategy)
+
+    blue = platform_factory("Blue_1", sensors=[make_sensor()])
+    red = platform_factory("Red_1", team="Red")
+    red.neutralised = True
+
+    detections = pipeline.detect([blue, red], current_time_sec=0.0, random_gen=None)
+    assert detections == []
+    assert fake_strategy.calls == []
+

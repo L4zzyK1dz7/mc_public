@@ -150,6 +150,13 @@ class PlatformState:
         return self.blueprint.speed_mps
 
     @property
+    def effective_speed_mps(self) -> float:
+        """Effective speed in metres per second, accounting for neutralisation."""
+        if self.neutralised and getattr(self.blueprint, "neutralised_platform_behaviour", "stop") == "stop":
+            return 0.0
+        return self.blueprint.speed_mps
+
+    @property
     def movement_type(self):
         """Static movement configuration (delegates to blueprint)."""
         return self.blueprint.movement_type
@@ -178,10 +185,7 @@ class PlatformState:
         Returns:
             bool: True if a new waypoint was generated on this tick, False otherwise.
         """
-        if self.speed_mps == 0.0:
-            return False
-
-        if self.neutralized and getattr(self.blueprint, "neutralised_platform_behaviour", "stop") == "stop":
+        if self.effective_speed_mps == 0.0:
             return False
 
         waypoint_generated = False

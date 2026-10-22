@@ -171,9 +171,14 @@ This page is where you build the mobile assets in your force.
    * **User Defined Waypoints**: Specify exact coordinate waypoints ($X, Y$ in km) that the platform must navigate sequentially.
 4. **Onboard Sensors**:
    * Add one or more sensors to your platform.
-   * **Sensor Types**: `Generic` (with configurable FOV arcs) or `Specific` *not implemented yet*.
+   * **Sensor Types**: `Generic` (with configurable FOV arcs) or `Specific` (trail segment crossing).
    * **Detection Threshold ($k$-of-$n$)**: Requires $k$ positive detection rolls out of the last $n$ consecutive time intervals to confirm a valid track, preventing single-ping false alarms.
    * **Active Source**: Blue vessels can be designated as active acoustic emitters to illuminate targets for passive sonobuoy fields.
+5. **Neutralised Platform Behaviour**:
+   * Applies only when `Detection End Condition` is set to `team_detection` (under `initial_detection` the simulation ends on first contact).
+   * **Stop**: Upon detection by opposition sensors or sonobuoys, the platform halts at its terminal position (effective speed becomes $0\text{ m/s}$). It is excluded from further opposition targeting and cannot be detected again.
+   * **Continue**: The platform continues traversing its route at full speed, but is counted as detected and cannot be detected again by opposing sensors or sonobuoys.
+   * **Sensor Continuity**: In both `Stop` and `Continue` modes, a neutralised platform's own fitted sensors remain active and can continue detecting opposing platforms.
 
 * **Configured Platforms Overview & Deletion**: Located at the top of the Create Platforms page, the **Configured Platforms** table provides a consolidated view of all created platforms (Name, Team, Speed, Movement type, and attached Sensors). To remove a platform draft, select its name from the dropdown list and click **Delete Platform**.
 

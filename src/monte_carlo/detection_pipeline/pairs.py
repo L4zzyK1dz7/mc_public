@@ -22,7 +22,9 @@ def iter_platform_sensors(
         if not platform.sensors:
             continue  # No sensor fitted, nothing to evaluate for this platform
 
-        target_platforms = [p for p in platform_states if p.team != platform.team]
+        target_platforms = [
+            p for p in platform_states if p.team != platform.team and not p.neutralised
+        ]
         if not target_platforms:
             continue
 

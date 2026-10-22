@@ -57,3 +57,41 @@ def test_skips_sensors_where_can_detect_is_false(platform_factory):
     assert len(pairs) == 1
     assert pairs[0][1] is normal_sensor
 
+
+def test_excludes_neutralised_targets_from_target_platforms(platform_factory):
+    sensor = make_sensor()
+    blue = platform_factory("Blue_1", sensors=[sensor])
+    red_active = platform_factory("Red_1", team="Red")
+    red_neutralised = platform_factory("Red_2", team="Red")
+    red_neutralised.neutralised = True
+
+    pairs = list(iter_platform_sensors([blue, red_active, red_neutralised]))
+    assert len(pairs) == 1
+    _, _, targets = pairs[0]
+    assert [t.id for t in targets] == ["Red_1"]
+
+
+def test_skips_platform_when_all_opposing_targets_are_neutralised(platform_factory):
+    sensor = make_sensor()
+    blue = platform_factory("Blue_1", sensors=[sensor])
+    red = platform_factory("Red_1", team="Red")
+    red.neutralised = True
+
+    pairs = list(iter_platform_sensors([blue, red]))
+    assert pairs == []
+
+
+def test_neutralised_detecting_platform_still_yields_sensors(platform_factory):
+    sensor = make_sensor()
+    blue = platform_factory("Blue_1", sensors=[sensor])
+    blue.neutralised = True
+    red = platform_factory("Red_1", team="Red")
+
+    pairs = list(iter_platform_sensors([blue, red]))
+    assert len(pairs) == 1
+    detecting, s, targets = pairs[0]
+    assert detecting is blue
+    assert s is sensor
+    assert [t.id for t in targets] == ["Red_1"]
+
+
